@@ -1,0 +1,316 @@
+watch_stylesheet: true
+watch_config: true
+debug: false
+update_check: true # Enable automatic update check.
+glazewm:
+  start_command: "glazewm.exe start"
+  stop_command: "glazewm.exe command wm-exit"
+  reload_command: "glazewm.exe command wm-exit && glazewm.exe start"
+bars:
+  primary-bar:
+    enabled: true
+    screens: ["primary"]
+    class_name: "yasb-bar"
+    alignment:
+      position: "top"
+      center: true
+    animation:
+      enabled: true
+      duration: 1000
+    blur_effect:
+      enabled: true
+      acrylic: true
+      dark_mode: true
+      round_corners: false
+      round_corners_type: "normal"
+      border_color: "#8dbcff"
+    window_flags:
+      always_on_top: false
+      windows_app_bar: true
+    dimensions:
+      width: "100%"
+      height: 28
+    padding:
+      top: 0
+      left: 0
+      bottom: 0
+      right: 0
+    widgets:
+      left: [
+        "glazewm_tiling_direction",
+        "glazewm_workspaces",
+        "active_window"
+      ]
+      center: [
+        "clock"
+      ]
+      right: [
+        "media",
+        "cava",
+        "weather",
+        "cpu",
+        "memory",
+        "wallpapers",
+        "power_menu"
+        ]
+widgets:
+  active_window:
+    type: "yasb.active_window.ActiveWindowWidget"
+    options:
+      label: "{win[process][name]}"
+      label_alt: "{win[title]}"
+      label_no_window: ""
+      label_icon: true
+      label_icon_size: 14
+      max_length: 46
+      max_length_ellipsis: "..."
+      monitor_exclusive: true
+  clock:
+    type: "yasb.clock.ClockWidget"
+    options:
+      label: "{%I:%M:%S}"
+      label_alt: "{%I:%M:%S}"
+      timezones: []
+      callbacks:
+        on_left: ""
+  weather:
+    type: "yasb.weather.WeatherWidget"
+    options:
+      label: "<span>{icon}</span> {temp}"
+      label_alt: "{location}: Min {min_temp}, Max {max_temp}, Humidity {humidity}"
+      # Weather widget is DISABLED by default (api_key and location are empty).
+      # To enable:
+      #   1. Get a free API key at https://www.weatherapi.com/
+      #   2. Set `api_key` below to that key.
+      #   3. Set `location` (e.g. "USA Los Angeles 90006" or just "Los Angeles").
+      #   4. Save the file — YASB live-reloads config (watch_config: true).
+      api_key:  # <-- paste your https://www.weatherapi.com/ key here
+      update_interval: 600
+      hide_decimal: true
+      location:  # <-- e.g. "USA Los Angeles 90006", or just "Los Angeles"
+      callbacks:
+        on_left: "toggle_card"
+      icons:
+        sunnyDay: "\ue30d"
+        clearNight: "\ue32b"
+        cloudyDay: "\ue312"
+        cloudyNight: "\ue311"
+        rainyDay: "\ue308"
+        rainyNight: "\ue333"
+        blizzardDay: "\udb83\udf36"
+        blizzardNight: "\udb83\udf36"
+        foggyDay: "\ue303"
+        foggyNight: "\ue346"
+        thunderstormDay: "\ue30f"
+        thunderstormNight: "\ue338"
+        default: "\uebaa"
+      weather_card:
+        blur: True
+        round_corners: True
+        round_corners_type: "normal"
+        border_color: "System"
+        alignment: "right"
+        direction: "down"
+        icon_size: 64
+        show_hourly_forecast: True # Set to False to disable hourly forecast
+        time_format: "12h" # can be 12h or 24h
+        hourly_point_spacing: 76
+        hourly_icon_size: 32 # better to set 16, 32 or 64 for better quality
+        icon_smoothing: true # should be true for smoother icon or false for sharper icon if using 16, 32 or 64 for hourly_icon_size
+        temp_line_width: 2 # can be 0 to hide the temperature line
+        current_line_color: "#8EAEE8"
+        current_line_width: 1 # can be 0 to hide the current hour line
+        current_line_style: "dot"
+      label_shadow:
+        enabled: true
+        color: "black"
+        radius: 3
+        offset: [ 1, 1 ]
+  power_menu:
+    type: "yasb.power_menu.PowerMenuWidget"
+    options:
+      label: "\uf011"
+      uptime: True
+      blur: False
+      blur_background: True
+      animation_duration: 200
+      button_row: 5
+      buttons:
+        shutdown: ["\uf011", "Rage Quit"]
+        restart: ["\uead2", "Oops, Reboot"]
+        signout: ["\udb80\udf43", "Dip Out"]
+        hibernate: ["\uf28e", "Bear Mode"]
+        sleep: ["\u23fe", "Nap Time"]
+        cancel: ["", "Nah, Im Good "]
+  wallpapers:
+    type: "yasb.wallpapers.WallpapersWidget"
+    options:
+      label: "<span>\udb80\udd1b</span>"
+      image_path:
+        - "~/Pictures/Windows-Rice"
+      change_automatically: false # Automatically change wallpaper
+      update_interval: 60 # If change_automatically is true, update interval in seconds
+      keybindings:
+      - keys: "alt+w"
+        action: "toggle_gallery"
+      engine:
+        enabled: true
+        animation: "diamond" # circle/slide_top/diamond/split
+      gallery:
+          enabled: true
+          blur: false
+          image_width: 220
+          image_per_page: 8
+          show_buttons: false
+          orientation: "portrait"
+          image_spacing: 8
+          lazy_load: true
+          lazy_load_fadein: 400
+          image_corner_radius: 1
+          enable_cache: false
+  cava:
+    type: "yasb.cava.CavaWidget"
+    options:
+      bar_height: 12
+      min_bar_height: 0
+      gradient: 1
+      reverse: 0
+      foreground: "#89b4fa"
+      gradient_color_1: '#74c7ec'
+      gradient_color_2: '#89b4fa'
+      gradient_color_3: '#cba6f7'
+      bars_number: 8
+      bar_spacing: 2
+      bar_width: 4
+      hide_empty: true
+      container_padding:
+        top: 0
+        left: 8
+        bottom: 0
+        right: 8
+  cpu:
+      type: "yasb.cpu.CpuWidget"
+      options:
+        label: "{info[percent][total]:.0f}%"
+        progress_bar:
+          enabled: true
+          position: "left"
+          size: 17
+          thickness: 3
+          color: "#89dceb"
+          background_color: "#1e1e2e"
+          animation: true 
+        animation:
+          enabled: true
+          type: FadeInOut
+          duration: 200
+        update_interval: 2000
+        callbacks:
+          on_right: "toggle_menu"
+          on_left: "toggle_menu"
+        menu:
+          enabled: true
+          show_graph: true
+          show_graph_grid: true
+          graph_history_size: 60
+  glazewm_workspaces:
+    type: "glazewm.workspaces.GlazewmWorkspacesWidget"
+    options:
+      offline_label: "GlazeWM is offline dude"
+      hide_empty_workspaces: false
+      hide_if_offline: false
+      enable_scroll_switching: true
+      reverse_scroll_direction: true
+  glazewm_tiling_direction:
+    type: "glazewm.tiling_direction.GlazewmTilingDirectionWidget"
+    options:
+      horizontal_label: "\ueb56"
+      vertical_label: "\ueb57"
+      btn_shadow:
+        enabled: true
+        color: "black"
+        radius: 3
+        offset: [ 1, 1 ]
+  memory:
+    type: "yasb.memory.MemoryWidget"
+    options:
+      label: "{virtual_mem_percent}%"
+      update_interval: 5000
+      progress_bar:
+        enabled: true
+        size: 17
+        thickness: 3
+        position: left
+        color: "#cba6f7"
+        background_color: "#1e1e2e"
+        animation: True
+      animation:
+        enabled: true
+        type: FadeInOut
+        duration: 200 
+      callbacks:
+        on_left: "toggle_menu"
+        on_right: "toggle_menu"
+      memory_thresholds:
+        low: 25
+        medium: 50
+        high: 90
+      menu:
+        enabled: true
+        show_graph: true
+        show_graph_grid: true
+        graph_history_size: 60
+  media:
+    type: "yasb.media.MediaWidget"
+    options:
+      label: "{title}"
+      label_alt: "{title}"
+      separator: " - "
+      hide_empty: true
+      callbacks:
+        on_left: "toggle_media_menu"
+      max_field_size:
+        label: 30
+        label_alt: 30
+      show_thumbnail: false
+      controls_only: false
+      controls_left: true
+      controls_hide: false
+      thumbnail_alpha: 80
+      thumbnail_padding: 8
+      thumbnail_corner_radius: 16
+      icons:
+        prev_track: " "
+        next_track: " "
+        play: "\udb81\udf5b"
+        pause: "\uf001"
+      media_menu:
+        blur: true
+        round_corners: false
+        round_corners_type: "normal"
+        border_color: "system"
+        alignment: "right"
+        direction: "down"
+        offset_top: 6
+        offset_left: 0
+        thumbnail_corner_radius: 0
+        thumbnail_size: 96
+        max_title_size: 60
+        max_artist_size: 20
+        show_source: true
+      media_menu_icons:
+        play: "\ue768"
+        pause: "\ue769"
+        prev_track: "\ue892"
+        next_track: "\ue893"
+      scrolling_label:
+        enabled: false
+        update_interval_ms: 33
+        style: "left"  # can be "left", "right", "bounce", "bounce-ease"
+        separator: " | "
+        label_padding: 0
+        always_scroll: false
+        # Easing curve params: https://www.desmos.com/calculator/j7eamemxzi
+        ease_slope: 20
+        ease_pos: 0.8
+        ease_min: 0.5
