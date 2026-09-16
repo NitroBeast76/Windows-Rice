@@ -48,6 +48,11 @@ param(
 
 $ErrorActionPreference = 'Continue'
 
+# UTF-8 output so the block and box-drawing characters render correctly.
+try {
+    [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+} catch {}
+
 # ============================================================ INITIALIZATION
 
 $HomeDir        = $env:USERPROFILE
@@ -67,17 +72,55 @@ $ManifestPath = Join-Path $BackupRoot 'manifest.json'
 
 # ================================================================== LOGGING
 
+$script:Sep = '─' * 60
+
+function Write-Separator {
+    Write-Host $script:Sep -ForegroundColor Cyan
+}
+
+function Write-Banner {
+    param([string]$Subtitle = '')
+    Write-Host ''
+    Write-Host '██╗    ██╗██╗███╗   ██╗██████╗  ██████╗ ██╗    ██╗███████╗' -ForegroundColor Magenta
+    Write-Host '██║    ██║██║████╗  ██║██╔══██╗██╔═══██╗██║    ██║██╔════╝' -ForegroundColor Magenta
+    Write-Host '██║ █╗ ██║██║██╔██╗ ██║██║  ██║██║   ██║██║ █╗ ██║███████╗' -ForegroundColor Magenta
+    Write-Host '██║███╗██║██║██║╚██╗██║██║  ██║██║   ██║██║███╗██║╚════██║' -ForegroundColor Magenta
+    Write-Host '╚███╔███╔╝██║██║ ╚████║██████╔╝╚██████╔╝╚███╔███╔╝███████║' -ForegroundColor Magenta
+    Write-Host ' ╚══╝╚══╝ ╚═╝╚═╝  ╚════╝╚═════╝  ╚═════╝  ╚══╝╚══╝ ╚══════╝' -ForegroundColor Magenta
+    Write-Host ''
+    Write-Host '                    WINDOWS-RICE' -ForegroundColor Magenta
+    if ($Subtitle) {
+        Write-Host "              $Subtitle" -ForegroundColor DarkGray
+    }
+    Write-Host ''
+}
+
 function Write-Section {
     param([string]$Title)
     Write-Host ''
-    Write-Host "==> $Title" -ForegroundColor Cyan
+    Write-Separator
+    Write-Host "  $($Title.ToUpper())" -ForegroundColor Cyan
+    Write-Separator
+    Write-Host ''
 }
 
-function Write-Ok       { param([string]$m) Write-Host "    [OK]      $m" -ForegroundColor Green }
-function Write-Skip     { param([string]$m) Write-Host "    [SKIP]    $m" -ForegroundColor DarkGray }
-function Write-WarnLine { param([string]$m) Write-Host "    [WARN]    $m" -ForegroundColor Yellow }
-function Write-FailLine { param([string]$m) Write-Host "    [FAIL]    $m" -ForegroundColor Red }
-function Write-Info     { param([string]$m) Write-Host "    [INFO]    $m" -ForegroundColor Gray }
+function Write-EnvBlock {
+    Write-Host '  Environment' -ForegroundColor Cyan
+    Write-Host ('    ' + 'Home'.PadRight(11) + $HomeDir) -ForegroundColor Gray
+    Write-Host ('    ' + 'Backup'.PadRight(11) + $BackupRoot) -ForegroundColor Gray
+    if ($DryRun) {
+        Write-Host ('    ' + 'Dry Run'.PadRight(11) + 'YES — no changes will be made') -ForegroundColor Yellow
+    } else {
+        Write-Host ('    ' + 'Dry Run'.PadRight(11) + 'No') -ForegroundColor Gray
+    }
+    Write-Host ''
+}
+
+function Write-Ok       { param([string]$m) Write-Host ('  ' + '[OK]'.PadRight(6) + ' ' + $m) -ForegroundColor Green }
+function Write-Skip     { param([string]$m) Write-Host ('  ' + '[SKIP]'.PadRight(6) + ' ' + $m) -ForegroundColor DarkGray }
+function Write-WarnLine { param([string]$m) Write-Host ('  ' + '[WARN]'.PadRight(6) + ' ' + $m) -ForegroundColor Yellow }
+function Write-FailLine { param([string]$m) Write-Host ('  ' + '[FAIL]'.PadRight(6) + ' ' + $m) -ForegroundColor Red }
+function Write-Info     { param([string]$m) Write-Host ('  ' + '[INFO]'.PadRight(6) + ' ' + $m) -ForegroundColor Gray }
 
 # ================================================================== SUMMARY
 
@@ -161,10 +204,10 @@ function Restore-FromBackup {
 
     if (-not $backup) {
         if (Test-Path -LiteralPath $Destination) {
-            Write-Skip "$Label - no backup found; deployed file left in place"
+            Write-Skip "$Label — no backup found; deployed file left in place"
             Add-Summary 'Skipped' "$Label (no backup)"
         } else {
-            Write-Skip "$Label - no backup and no deployed file"
+            Write-Skip "$Label — no backup and no deployed file"
         }
         return
     }
@@ -184,7 +227,7 @@ function Restore-FromBackup {
         Write-Ok "restored: $Label"
         Add-Summary 'Restored' "$Label"
     } catch {
-        Write-FailLine "$Label - $_"
+        Write-FailLine "$Label — $_"
         Add-Summary 'Failed' "$Label ($_)"
     }
 }
@@ -203,7 +246,7 @@ function Read-Manifest {
         $raw = Get-Content -LiteralPath $ManifestPath -Raw -ErrorAction Stop
         $obj = $raw | ConvertFrom-Json -ErrorAction Stop
     } catch {
-        Write-WarnLine "Could not parse manifest at $ManifestPath - $_"
+        Write-WarnLine "Could not parse manifest at $ManifestPath — $_"
         return $null
     }
     if (-not $obj.installed) { return $null }
@@ -213,6 +256,32 @@ function Read-Manifest {
         scoop  = if ($obj.installed.scoop)  { @($obj.installed.scoop)  } else { @() }
     }
     return $result
+}
+
+function Write-ManifestBlock {
+    param($Manifest)
+
+    if (-not $Manifest) {
+        Write-Host '  Installation manifest' -ForegroundColor Cyan
+        Write-Host '    [WARN] Installation manifest unavailable' -ForegroundColor Yellow
+        Write-Host '           Package removal has been skipped.' -ForegroundColor Yellow
+        Write-Host ''
+        return
+    }
+
+    $wingetCount = @($Manifest.winget).Count
+    $scoopCount  = @($Manifest.scoop).Count
+
+    $fonts = @($Manifest.scoop | Where-Object { $_ -match 'NF' -or $_ -match 'NerdFont' })
+    $fontCount = $fonts.Count
+
+    Write-Host '  Installation manifest' -ForegroundColor Cyan
+    Write-Host ('    ' + 'Winget packages'.PadRight(20) + $wingetCount) -ForegroundColor Gray
+    Write-Host ('    ' + 'Scoop packages'.PadRight(20) + $scoopCount) -ForegroundColor Gray
+    if ($fontCount -gt 0) {
+        Write-Host ('    ' + 'Nerd Fonts'.PadRight(20) + $fontCount) -ForegroundColor Gray
+    }
+    Write-Host ''
 }
 
 # ---------------------------------------------------------- Windows Terminal
@@ -242,7 +311,7 @@ function Get-WindowsTerminalSettingsPath {
             }
         }
         if ($candidates.Count -gt 1) {
-            Write-WarnLine 'Multiple Windows Terminal package folders detected - refusing to guess.'
+            Write-WarnLine 'Multiple Windows Terminal package folders detected — refusing to guess.'
         }
     }
     return $null
@@ -271,7 +340,7 @@ function Uninstall-WingetPackage {
         $out = (& winget uninstall --id $Id --exact --silent `
                     --accept-source-agreements 2>&1 | Out-String)
     } catch {
-        Write-FailLine "$Name - $_"
+        Write-FailLine "$Name — $_"
         Add-Summary 'Failed' "$Name ($_)"
         return $false
     }
@@ -288,7 +357,7 @@ function Uninstall-WingetPackage {
         return $true
     }
 
-    Write-FailLine "$Name - winget exit $LASTEXITCODE"
+    Write-FailLine "$Name — winget exit $LASTEXITCODE"
     Add-Summary 'Failed' "$Name (winget exit $LASTEXITCODE)"
     return $false
 }
@@ -300,7 +369,7 @@ function Uninstall-ScoopPackage {
     )
 
     if (-not (Test-CommandExists 'scoop')) {
-        Write-Skip "scoop not available - cannot uninstall $Display"
+        Write-Skip "scoop not available — cannot uninstall $Display"
         Add-Summary 'Skipped' "$Display (scoop unavailable)"
         return
     }
@@ -314,7 +383,7 @@ function Uninstall-ScoopPackage {
     try {
         $out = (& scoop uninstall $Name 2>&1 | Out-String)
     } catch {
-        Write-FailLine "$Display - $_"
+        Write-FailLine "$Display — $_"
         Add-Summary 'Failed' "$Display ($_)"
         return
     }
@@ -331,7 +400,7 @@ function Uninstall-ScoopPackage {
         return
     }
 
-    Write-FailLine "$Display - scoop exit $LASTEXITCODE"
+    Write-FailLine "$Display — scoop exit $LASTEXITCODE"
     Add-Summary 'Failed' "$Display (scoop exit $LASTEXITCODE)"
 }
 
@@ -423,7 +492,7 @@ function Restore-Wallpapers {
             Write-Ok "restored: $destPath"
             Add-Summary 'Restored' $destPath
         } catch {
-            Write-FailLine "$destPath - $_"
+            Write-FailLine "$destPath — $_"
             Add-Summary 'Failed' "$destPath ($_)"
         }
     }
@@ -460,7 +529,7 @@ function Remove-WallpaperDirectory {
 
     $items = @(Get-ChildItem -LiteralPath $WallpaperDir -Force -ErrorAction SilentlyContinue)
     if ($items.Count -gt 0) {
-        Write-Skip "$WallpaperDir is not empty - left in place"
+        Write-Skip "$WallpaperDir is not empty — left in place"
         Add-Summary 'Skipped' 'Wallpaper directory (not empty)'
         return
     }
@@ -476,19 +545,19 @@ function Remove-WallpaperDirectory {
         Write-Ok "removed empty directory: $WallpaperDir"
         Add-Summary 'Removed' $WallpaperDir
     } catch {
-        Write-WarnLine "Could not remove $WallpaperDir - $_"
+        Write-WarnLine "Could not remove $WallpaperDir — $_"
         Add-Summary 'Warnings' "$WallpaperDir ($_)"
     }
 }
 
 function Uninstall-AllPackages {
-    Write-Section 'Uninstalling winget packages'
+    Write-Section 'Removing packages'
 
     $manifest = Read-Manifest
+    Write-ManifestBlock -Manifest $manifest
+
     if (-not $manifest) {
-        Write-WarnLine "No readable installation manifest at $ManifestPath"
-        Write-WarnLine 'Cannot determine which packages were installed by Windows-Rice.'
-        Write-WarnLine 'Skipping package removal to avoid uninstalling user-installed packages.'
+        Write-WarnLine 'No readable installation manifest — package removal skipped.'
         Add-Summary 'Skipped' 'All packages (no manifest)'
         return
     }
@@ -498,16 +567,21 @@ function Uninstall-AllPackages {
     if ($wingetIds.Count -eq 0) {
         Write-Skip 'No winget packages recorded in manifest'
     } elseif (-not (Test-WingetAvailable)) {
-        Write-WarnLine 'winget is not available - skipping winget package removal.'
+        Write-WarnLine 'winget is not available — skipping winget package removal.'
         Add-Summary 'Warnings' 'winget not available (package removal skipped)'
     } else {
+        # NOTE: PowerShell 7 and Windows Terminal are never in the manifest
+        # because install.ps1 registers a package only on the success path of
+        # an actual install. If a future change ever records them, this loop
+        # will still uninstall them; today they are simply not present.
         foreach ($id in $wingetIds) {
             Uninstall-WingetPackage -Id $id -Name $id
         }
     }
 
     # -------- scoop -------------------------------------------------------
-    Write-Section 'Uninstalling scoop packages'
+    Write-Host ''
+    Write-Info 'Scoop packages'
 
     $scoopIds = @($manifest.scoop)
     if ($scoopIds.Count -eq 0) {
@@ -520,7 +594,7 @@ function Uninstall-AllPackages {
 }
 
 function Remove-BackupDirectory {
-    Write-Section 'Backup directory'
+    Write-Section 'Cleanup'
 
     if (-not (Test-Path -LiteralPath $BackupRoot)) {
         Write-Skip 'No backup directory to purge'
@@ -546,7 +620,7 @@ function Remove-BackupDirectory {
         Write-Ok "removed: $BackupRoot"
         Add-Summary 'Removed' $BackupRoot
     } catch {
-        Write-FailLine "Could not remove $BackupRoot - $_"
+        Write-FailLine "Could not remove $BackupRoot — $_"
         Add-Summary 'Failed' "$BackupRoot ($_)"
     }
 }
@@ -554,55 +628,61 @@ function Remove-BackupDirectory {
 # =============================================================== SUMMARY
 
 function Write-FinalSummary {
-    Write-Host ''
-    Write-Host '============================================================' -ForegroundColor Magenta
-    Write-Host '  Windows-Rice - Uninstall summary' -ForegroundColor Magenta
-    Write-Host '============================================================' -ForegroundColor Magenta
+    Write-Section 'Complete'
 
-    $order = @('Restored', 'Removed', 'Uninstalled', 'Skipped', 'Warnings', 'Failed')
-    foreach ($category in $order) {
-        $items = $script:Summary[$category]
-        if ($items.Count -eq 0) { continue }
+    $restored    = $script:Summary['Restored'].Count
+    $removed     = $script:Summary['Removed'].Count
+    $uninstalled = $script:Summary['Uninstalled'].Count
+    $skipped     = $script:Summary['Skipped'].Count
+    $warnings    = $script:Summary['Warnings'].Count
+    $failed      = $script:Summary['Failed'].Count
 
-        $color = switch ($category) {
-            'Restored'    { 'Green' }
-            'Removed'     { 'Cyan' }
-            'Uninstalled' { 'Cyan' }
-            'Skipped'     { 'DarkGray' }
-            'Warnings'    { 'Yellow' }
-            'Failed'      { 'Red' }
-            default       { 'White' }
-        }
+    $rows = @(
+        @{ Label = 'Restored';    Value = $restored },
+        @{ Label = 'Removed';     Value = $removed },
+        @{ Label = 'Uninstalled'; Value = $uninstalled },
+        @{ Label = 'Skipped';     Value = $skipped },
+        @{ Label = 'Warnings';    Value = $warnings },
+        @{ Label = 'Failed';      Value = $failed }
+    )
 
-        Write-Host ''
-        Write-Host "$category ($($items.Count)):" -ForegroundColor $color
-        foreach ($i in $items) {
-            Write-Host "  - $i" -ForegroundColor $color
-        }
+    foreach ($r in $rows) {
+        Write-Host ('  ' + $r.Label.PadRight(16) + $r.Value) -ForegroundColor Gray
     }
 
     Write-Host ''
+
+    if ($failed -gt 0) {
+        Write-Host '  [FAIL] Uninstallation completed with errors.' -ForegroundColor Red
+    } elseif ($warnings -gt 0) {
+        Write-Host '  [WARN] Uninstallation completed with warnings.' -ForegroundColor Yellow
+    } else {
+        Write-Host '  Windows-Rice has been removed safely.' -ForegroundColor Green
+    }
+
+    Write-Host ''
+
     if (Test-Path -LiteralPath $BackupRoot) {
-        Write-Host "Backups preserved: $BackupRoot" -ForegroundColor Gray
+        Write-Host '  Backups preserved' -ForegroundColor Cyan
+        Write-Host "    $BackupRoot" -ForegroundColor Gray
+        Write-Host ''
     }
 
+    Write-Host '  Next steps' -ForegroundColor Cyan
+    Write-Host '    1. Close and reopen your terminal.' -ForegroundColor Gray
+    Write-Host '    2. Restart GlazeWM if it was running.' -ForegroundColor Gray
+    Write-Host '    3. Restart Windows Terminal if it was open.' -ForegroundColor Gray
     Write-Host ''
-    Write-Host 'Next steps:' -ForegroundColor Magenta
-    Write-Host '  1. Close and reopen your terminal.' -ForegroundColor Gray
-    Write-Host '  2. Restart GlazeWM if it was running.' -ForegroundColor Gray
-    Write-Host '  3. Restart Windows Terminal if it was open.' -ForegroundColor Gray
+
+    Write-Separator
     Write-Host ''
 }
 
 # ================================================================== MAIN
 
-Write-Host ''
-Write-Host '  Windows-Rice - Uninstall' -ForegroundColor Magenta
-Write-Host '  ------------------------' -ForegroundColor Magenta
-Write-Host "  home:   $HomeDir"
-Write-Host "  dry:    $DryRun"
-Write-Host "  remove: packages=$RemovePackages purge=$Purge"
-Write-Host ''
+Write-Banner 'Safe removal & restoration'
+Write-Section 'Windows-Rice • Uninstall'
+Write-EnvBlock
 
 if (-not (Test-Path -LiteralPath $BackupRoot)) {
     Write-WarnLine "No backup directory found at $BackupRoot."
@@ -636,7 +716,7 @@ if ($RemovePackages) {
 if ($Purge) {
     Remove-BackupDirectory
 } else {
-    Write-Section 'Backup directory'
+    Write-Section 'Cleanup'
     Write-Skip 'Backups and manifest preserved (pass -Purge to delete)'
 }
 

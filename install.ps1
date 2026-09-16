@@ -54,6 +54,11 @@ param(
 
 $ErrorActionPreference = 'Continue'
 
+# UTF-8 output so the block and box-drawing characters render correctly.
+try {
+    [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+} catch {}
+
 # ============================================================ INITIALIZATION
 
 $RepoRoot   = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
@@ -82,17 +87,55 @@ $script:Manifest      = $null
 
 # ================================================================== LOGGING
 
+$script:Sep = '─' * 60
+
+function Write-Separator {
+    Write-Host $script:Sep -ForegroundColor Cyan
+}
+
+function Write-Banner {
+    param([string]$Subtitle = '')
+    Write-Host ''
+    Write-Host '██╗    ██╗██╗███╗   ██╗██████╗  ██████╗ ██╗    ██╗███████╗' -ForegroundColor Magenta
+    Write-Host '██║    ██║██║████╗  ██║██╔══██╗██╔═══██╗██║    ██║██╔════╝' -ForegroundColor Magenta
+    Write-Host '██║ █╗ ██║██║██╔██╗ ██║██║  ██║██║   ██║██║ █╗ ██║███████╗' -ForegroundColor Magenta
+    Write-Host '██║███╗██║██║██║╚██╗██║██║  ██║██║   ██║██║███╗██║╚════██║' -ForegroundColor Magenta
+    Write-Host '╚███╔███╔╝██║██║ ╚████║██████╔╝╚██████╔╝╚███╔███╔╝███████║' -ForegroundColor Magenta
+    Write-Host ' ╚══╝╚══╝ ╚═╝╚═╝  ╚════╝╚═════╝  ╚═════╝  ╚══╝╚══╝ ╚══════╝' -ForegroundColor Magenta
+    Write-Host ''
+    Write-Host '                    WINDOWS-RICE' -ForegroundColor Magenta
+    if ($Subtitle) {
+        Write-Host "              $Subtitle" -ForegroundColor DarkGray
+    }
+    Write-Host ''
+}
+
 function Write-Section {
     param([string]$Title)
     Write-Host ''
-    Write-Host "==> $Title" -ForegroundColor Cyan
+    Write-Separator
+    Write-Host "  $($Title.ToUpper())" -ForegroundColor Cyan
+    Write-Separator
+    Write-Host ''
 }
 
-function Write-Ok       { param([string]$m) Write-Host "    [OK]      $m" -ForegroundColor Green }
-function Write-Skip     { param([string]$m) Write-Host "    [SKIP]    $m" -ForegroundColor DarkGray }
-function Write-WarnLine { param([string]$m) Write-Host "    [WARN]    $m" -ForegroundColor Yellow }
-function Write-FailLine { param([string]$m) Write-Host "    [FAIL]    $m" -ForegroundColor Red }
-function Write-Info     { param([string]$m) Write-Host "    [INFO]    $m" -ForegroundColor Gray }
+function Write-EnvBlock {
+    Write-Host '  Environment' -ForegroundColor Cyan
+    Write-Host ('    ' + 'Home'.PadRight(11) + $HomeDir) -ForegroundColor Gray
+    Write-Host ('    ' + 'Repository'.PadRight(11) + $RepoRoot) -ForegroundColor Gray
+    if ($DryRun) {
+        Write-Host ('    ' + 'Dry Run'.PadRight(11) + 'YES — no changes will be made') -ForegroundColor Yellow
+    } else {
+        Write-Host ('    ' + 'Dry Run'.PadRight(11) + 'No') -ForegroundColor Gray
+    }
+    Write-Host ''
+}
+
+function Write-Ok       { param([string]$m) Write-Host ('  ' + '[OK]'.PadRight(6) + ' ' + $m) -ForegroundColor Green }
+function Write-Skip     { param([string]$m) Write-Host ('  ' + '[SKIP]'.PadRight(6) + ' ' + $m) -ForegroundColor DarkGray }
+function Write-WarnLine { param([string]$m) Write-Host ('  ' + '[WARN]'.PadRight(6) + ' ' + $m) -ForegroundColor Yellow }
+function Write-FailLine { param([string]$m) Write-Host ('  ' + '[FAIL]'.PadRight(6) + ' ' + $m) -ForegroundColor Red }
+function Write-Info     { param([string]$m) Write-Host ('  ' + '[INFO]'.PadRight(6) + ' ' + $m) -ForegroundColor Gray }
 
 # ================================================================== SUMMARY
 
@@ -185,7 +228,7 @@ function Backup-And-Deploy {
     )
 
     if (-not (Test-Path -LiteralPath $Source)) {
-        Write-FailLine "$Label - source missing: $Source"
+        Write-FailLine "$Label — source missing: $Source"
         Add-Summary 'Failed' "$Label (source missing)"
         return $false
     }
@@ -213,7 +256,7 @@ function Backup-And-Deploy {
         $backupPath = Join-Path $backupDir $backupName
 
         if ($DryRun) {
-            Write-Skip "would back up $Destination -> $backupPath"
+            Write-Skip "would back up $Destination → $backupPath"
         } else {
             if (-not (Test-Path -LiteralPath $backupDir)) {
                 New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
@@ -235,7 +278,7 @@ function Backup-And-Deploy {
         Add-Summary 'Configured' $Label
         return $true
     } catch {
-        Write-FailLine "$Label - $_"
+        Write-FailLine "$Label — $_"
         Add-Summary 'Failed' "$Label ($_)"
         return $false
     }
@@ -264,7 +307,7 @@ function Get-Manifest {
         $raw = Get-Content -LiteralPath $ManifestPath -Raw -ErrorAction Stop
         $obj = $raw | ConvertFrom-Json -ErrorAction Stop
     } catch {
-        Write-WarnLine "Could not parse existing manifest at $ManifestPath - starting fresh."
+        Write-WarnLine "Could not parse existing manifest at $ManifestPath — starting fresh."
         return $empty
     }
 
@@ -367,7 +410,7 @@ function Install-WingetPackage {
                     --accept-package-agreements --accept-source-agreements 2>&1 |
                 Out-String)
     } catch {
-        Write-FailLine "$Name - $_"
+        Write-FailLine "$Name — $_"
         Add-Summary 'Failed' "$Name ($_)"
         return $false
     }
@@ -391,7 +434,7 @@ function Install-WingetPackage {
         return $true
     }
 
-    Write-FailLine "$Name - winget exit $LASTEXITCODE"
+    Write-FailLine "$Name — winget exit $LASTEXITCODE"
     Add-Summary 'Failed' "$Name (winget exit $LASTEXITCODE)"
     return $false
 }
@@ -449,7 +492,7 @@ function Add-ScoopBucket {
     try {
         $out = (& scoop bucket add $Bucket 2>&1 | Out-String)
     } catch {
-        Write-WarnLine "scoop bucket add $Bucket - $_"
+        Write-WarnLine "scoop bucket add $Bucket — $_"
         Add-Summary 'Warnings' "scoop bucket $Bucket ($_)"
         return
     }
@@ -482,7 +525,7 @@ function Install-ScoopPackage {
     try {
         $out = (& scoop install $Name 2>&1 | Out-String)
     } catch {
-        Write-FailLine "$Display - $_"
+        Write-FailLine "$Display — $_"
         Add-Summary 'Failed' "$Display ($_)"
         return $false
     }
@@ -499,7 +542,7 @@ function Install-ScoopPackage {
         return $true
     }
 
-    Write-FailLine "$Display - scoop exit $LASTEXITCODE"
+    Write-FailLine "$Display — scoop exit $LASTEXITCODE"
     Add-Summary 'Failed' "$Display (scoop exit $LASTEXITCODE)"
     return $false
 }
@@ -554,7 +597,7 @@ function Install-AllPackages {
     }
 
     Write-Section 'Thide'
-    Write-Skip 'Thide - installer not included in repository yet.'
+    Write-Skip 'Thide — installer not included in repository yet.'
     Add-Summary 'Skipped' 'Thide (installer not bundled)'
 }
 
@@ -562,7 +605,7 @@ function Install-AllPackages {
 
 function Install-RiceFont {
     if (-not (Test-CommandExists 'scoop')) {
-        Write-WarnLine 'Scoop unavailable - cannot install JetBrainsMono Nerd Font.'
+        Write-WarnLine 'Scoop unavailable — cannot install JetBrainsMono Nerd Font.'
         Write-WarnLine 'Install manually: https://www.nerdfonts.com/font-downloads'
         Add-Summary 'Skipped' 'JetBrainsMono Nerd Font (Scoop unavailable)'
         return
@@ -593,7 +636,7 @@ function Install-RiceFont {
         return
     }
 
-    Write-WarnLine "$primary failed - trying $fallback..."
+    Write-WarnLine "$primary failed — trying $fallback..."
     $out2 = (& scoop install $fallback 2>&1 | Out-String)
 
     if ($LASTEXITCODE -eq 0) {
@@ -638,7 +681,7 @@ function Deploy-AllConfigs {
         -Label        '~/.glzr/glazewm/config.yaml' `
         -BackupSubdir 'glazewm'
 
-    # Cava - path confirmed: ~/.config/cava/config is read by karlstav.cava
+    # Cava — path confirmed: ~/.config/cava/config is read by karlstav.cava
     # on Windows as well as on Linux.
     Backup-And-Deploy `
         -Source       (Join-Path $ConfigRoot 'cava\config') `
@@ -646,7 +689,7 @@ function Deploy-AllConfigs {
         -Label        '~/.config/cava/config' `
         -BackupSubdir 'cava'
 
-    # Fastfetch - canonical location is ~/.config/fastfetch only.
+    # Fastfetch — canonical location is ~/.config/fastfetch only.
     Backup-And-Deploy `
         -Source       (Join-Path $ConfigRoot 'fastfetch\config.jsonc') `
         -Destination  (Join-Path $FastfetchDir 'config.jsonc') `
@@ -680,7 +723,7 @@ function Deploy-Wallpapers {
         Deploy bundled wallpapers one file at a time via Backup-And-Deploy so
         each file gets the same backup protection as other config files.
         Backup subdir mirrors the wallpaper's relative path under
-        assets/wallpapers/, e.g. assets/wallpapers/dark/x.jpg ->
+        assets/wallpapers/, e.g. assets/wallpapers/dark/x.jpg →
         ~/.windows-rice-backup/wallpapers/dark/x.jpg.backup-<ts>.
     #>
     Write-Section 'Wallpapers'
@@ -758,10 +801,6 @@ function Merge-ArrayByKey {
         Base items are kept. Patch items whose key matches a base item merge
         their fields onto the base item (patch wins). Patch items without a
         match are appended. Idempotent.
-
-        Used for profiles (by guid) and schemes (by name), where the user may
-        have customized other fields on the same entry and we want to keep
-        those customizations.
     #>
     param(
         [object[]]$BaseArray,
@@ -792,14 +831,9 @@ function Merge-ArrayByKey {
 function Replace-ArrayEntriesByKey {
     <#
         Deterministic replacement of rice-owned entries.
-
         Any base entry whose KeyName value appears in the patch array is
-        removed entirely. All patch entries are then appended. Base entries
+        removed entirely, then all patch entries are appended. Base entries
         with keys not present in the patch are preserved untouched.
-
-        Used for actions and keybindings, where the rice-owned IDs are
-        complete definitions and merging user fields onto them is not useful.
-        Idempotent: running twice yields the same result.
     #>
     param(
         [object[]]$BaseArray,
@@ -835,8 +869,6 @@ function Get-WindowsTerminalSettingsPath {
         package. Prefer the AppxPackage identity (PackageFamilyName) which is
         the authoritative source. Fall back to a folder scan only when the
         Appx API is unavailable, and only when exactly one candidate exists.
-
-        Returns $null when the location cannot be determined reliably.
     #>
     $pkg = $null
     try {
@@ -903,7 +935,7 @@ function Update-WindowsTerminalConfig {
 
     # Fresh install of Windows Terminal: no existing settings.json.
     if (-not (Test-Path -LiteralPath $wtSettingsPath)) {
-        Write-Info 'No existing settings.json - deploying repo settings verbatim.'
+        Write-Info 'No existing settings.json — deploying repo settings verbatim.'
         Backup-And-Deploy -Source $RepoSettingsPath -Destination $wtSettingsPath `
                           -Label 'Windows Terminal settings.json' `
                           -BackupSubdir 'terminal'
@@ -920,7 +952,7 @@ function Update-WindowsTerminalConfig {
         Write-WarnLine 'The file may contain JSONC comments that PowerShell 5.1 cannot parse.'
         Write-WarnLine "Details: $_"
         Write-WarnLine 'Your existing settings.json was left untouched.'
-        Add-Summary 'Skipped' 'Windows Terminal (settings.json unparseable - left untouched)'
+        Add-Summary 'Skipped' 'Windows Terminal (settings.json unparseable — left untouched)'
         return
     }
 
@@ -1047,7 +1079,7 @@ function Ensure-PSReadLine {
         return
     }
 
-    Write-Info 'PSReadLine not found - attempting per-user install...'
+    Write-Info 'PSReadLine not found — attempting per-user install...'
     try {
         Install-Module -Name PSReadLine -Scope CurrentUser -Force `
             -AllowClobber -SkipPublisherCheck -ErrorAction Stop
@@ -1115,65 +1147,66 @@ function Invoke-Verification {
 # =============================================================== SUMMARY
 
 function Write-FinalSummary {
-    Write-Host ''
-    Write-Host '============================================================' -ForegroundColor Magenta
-    Write-Host '  Windows-Rice - Install summary' -ForegroundColor Magenta
-    Write-Host '============================================================' -ForegroundColor Magenta
+    Write-Section 'Complete'
 
-    $order = @('Installed', 'AlreadyInstalled', 'Configured', 'Skipped', 'Warnings', 'Failed')
-    foreach ($category in $order) {
-        $items = $script:Summary[$category]
-        if ($items.Count -eq 0) { continue }
+    $installed  = $script:Summary['Installed'].Count
+    $already    = $script:Summary['AlreadyInstalled'].Count
+    $configured = $script:Summary['Configured'].Count
+    $skipped    = $script:Summary['Skipped'].Count
+    $warnings   = $script:Summary['Warnings'].Count
+    $failed     = $script:Summary['Failed'].Count
 
-        $color = switch ($category) {
-            'Installed'        { 'Green' }
-            'AlreadyInstalled' { 'DarkGray' }
-            'Configured'       { 'Cyan' }
-            'Skipped'          { 'DarkGray' }
-            'Warnings'         { 'Yellow' }
-            'Failed'           { 'Red' }
-            default            { 'White' }
-        }
+    $rows = @(
+        @{ Label = 'Installed';       Value = $installed },
+        @{ Label = 'Already present'; Value = $already },
+        @{ Label = 'Configured';      Value = $configured },
+        @{ Label = 'Skipped';         Value = $skipped },
+        @{ Label = 'Warnings';        Value = $warnings },
+        @{ Label = 'Failed';          Value = $failed }
+    )
 
-        Write-Host ''
-        Write-Host "$category ($($items.Count)):" -ForegroundColor $color
-        foreach ($i in $items) {
-            Write-Host "  - $i" -ForegroundColor $color
-        }
+    foreach ($r in $rows) {
+        Write-Host ('  ' + $r.Label.PadRight(16) + $r.Value) -ForegroundColor Gray
     }
 
     Write-Host ''
-    if (Test-Path -LiteralPath $BackupRoot) {
-        Write-Host "Backups: $BackupRoot" -ForegroundColor Gray
-        Write-Host '         (per-component subfolders, timestamped filenames)' -ForegroundColor DarkGray
+
+    if ($failed -gt 0) {
+        Write-Host '  [FAIL] Installation completed with errors.' -ForegroundColor Red
+    } elseif ($warnings -gt 0) {
+        Write-Host '  [WARN] Installation completed with warnings.' -ForegroundColor Yellow
     } else {
-        Write-Host 'Backups: (none created this run)' -ForegroundColor Gray
-    }
-
-    if (Test-Path -LiteralPath $ManifestPath) {
-        Write-Host "Manifest: $ManifestPath" -ForegroundColor Gray
+        Write-Host '  Windows-Rice installation completed successfully.' -ForegroundColor Green
     }
 
     Write-Host ''
-    Write-Host 'Next steps:' -ForegroundColor Magenta
-    Write-Host '  1. Close and reopen your terminal so PATH and font changes are loaded.' -ForegroundColor Gray
-    Write-Host '  2. Start (or restart) GlazeWM.' -ForegroundColor Gray
-    Write-Host '  3. YASB will launch automatically through GlazeWM.' -ForegroundColor Gray
-    Write-Host '  4. If Windows Terminal was already running, restart it.' -ForegroundColor Gray
-    Write-Host '  5. Log out or restart Windows only if something still does not refresh.' -ForegroundColor Gray
+
+    if (Test-Path -LiteralPath $BackupRoot) {
+        Write-Host '  Backup location' -ForegroundColor Cyan
+        Write-Host "    $BackupRoot" -ForegroundColor Gray
+        if (Test-Path -LiteralPath $ManifestPath) {
+            Write-Host "    $ManifestPath" -ForegroundColor DarkGray
+        }
+        Write-Host ''
+    }
+
+    Write-Host '  Next steps' -ForegroundColor Cyan
+    Write-Host '    1. Close and reopen your terminal so PATH and font changes are loaded.' -ForegroundColor Gray
+    Write-Host '    2. Start (or restart) GlazeWM.' -ForegroundColor Gray
+    Write-Host '    3. YASB will launch automatically through GlazeWM.' -ForegroundColor Gray
+    Write-Host '    4. If Windows Terminal was already running, restart it.' -ForegroundColor Gray
+    Write-Host '    5. Log out or restart Windows only if something still does not refresh.' -ForegroundColor Gray
+    Write-Host ''
+
+    Write-Separator
     Write-Host ''
 }
 
 # ================================================================== MAIN
 
-Write-Host ''
-Write-Host '  Windows-Rice' -ForegroundColor Magenta
-Write-Host '  ------------' -ForegroundColor Magenta
-Write-Host "  repo:   $RepoRoot"
-Write-Host "  home:   $HomeDir"
-Write-Host "  dry:    $DryRun"
-Write-Host "  skip:   packages=$SkipPackages fonts=$SkipFonts terminal=$SkipTerminal"
-Write-Host ''
+Write-Banner 'Installation & configuration'
+Write-Section 'Windows-Rice • Install'
+Write-EnvBlock
 
 # Sanity check: repository layout -------------------------------------------
 $requiredPaths = @(
@@ -1190,7 +1223,7 @@ $requiredPaths = @(
 $missing = @($requiredPaths | Where-Object { -not (Test-Path -LiteralPath $_) })
 if ($missing.Count -gt 0) {
     Write-FailLine 'Repository layout is incomplete. Missing:'
-    foreach ($m in $missing) { Write-Host "    - $m" -ForegroundColor Red }
+    foreach ($m in $missing) { Write-Host "        - $m" -ForegroundColor Red }
     Write-Host ''
     Write-WarnLine 'Run install.ps1 from the repository root, or re-clone the repository.'
     exit 1
