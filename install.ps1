@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Windows-Rice installer for Windows 10 / 11.
 

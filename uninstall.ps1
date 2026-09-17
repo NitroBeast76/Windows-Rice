@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Reverts changes made by the Windows-Rice installer.
 
