@@ -1,16 +1,17 @@
 general:
-    # Commands to run when the WM has started. This is useful for running a
-    # script or launching another application.
-    #
-    # Launch YASB after a short delay so GlazeWM's IPC pipe (\\.\pipe\glazewm)
-    # is ready before YASB's glazewm_* widgets try to connect.
-    startup_commands:
-      - 'cmd /c timeout /t 2 /nobreak >nul && start "" yasb.exe'
+  # Commands to run when the WM has started. This is useful for running a
+  # script or launching another application.
+  #
+  # `shell-exec` is required because GlazeWM parses each entry as one of
+  # its own subcommands, not as a raw shell string. `cmd /c start ""`
+  # detaches YASB so GlazeWM's startup isn't blocked while the bar launches.
+  startup_commands:
+    - 'shell-exec cmd /c start "" yasb.exe'
 
-    # Commands to run just before the WM is shutdown.
-    # Kill YASB so it doesn't linger without a WM to talk to.
-    shutdown_commands:
-      - 'taskkill /IM yasb.exe /F'
+  # Commands to run just before the WM is shutdown.
+  # Kill YASB so it doesn't linger without a WM to talk to.
+  shutdown_commands:
+    - 'shell-exec taskkill /IM yasb.exe /F'
 
   # Commands to run after the WM config is reloaded.
   config_reload_commands: []
