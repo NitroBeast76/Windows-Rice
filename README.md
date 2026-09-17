@@ -4,6 +4,19 @@ A Windows 10/11 ricing setup built around GlazeWM and YASB, with PowerShell auto
 
 Windows-Rice is designed to be cloned, run once, and reversed cleanly. Existing files are only replaced after they have been backed up, and package removal is driven by a manifest so the uninstaller never removes software the user already had.
 
+![Windows-Rice — tiled workspace with cava, btop, and Fastfetch](assets/screenshots/tiling.png)
+
+<details>
+<summary>More screenshots</summary>
+
+![Windows-Rice desktop — YASB bar and wallpaper](assets/screenshots/desktop.png)
+
+![Installer — package installation phase](assets/screenshots/installer-1.png)
+
+![Installer — completion summary](assets/screenshots/installer-2.png)
+
+</details>
+
 ---
 
 ## Features
@@ -98,7 +111,8 @@ Windows-Rice/
 │       └── settings.json
 ├── assets/
 │   ├── icons/
-│   └── wallpapers/
+│   ├── wallpapers/
+│   └── screenshots/
 └── scripts/
 ```
 
@@ -115,6 +129,7 @@ Windows-Rice/
 | `configs/terminal/` | Windows Terminal settings merged into the user's existing configuration. |
 | `assets/icons/` | Icons used by the rice. |
 | `assets/wallpapers/` | Wallpapers bundled with the repository, deployed per file with backup protection. |
+| `assets/screenshots/` | Images used in this README. |
 | `scripts/` | Reserved for auxiliary scripts. |
 
 ---
@@ -133,9 +148,21 @@ No administrator privileges are required for the normal install path. Scoop inst
 ## Installation
 
 ```powershell
-git clone <repository-url>
+git clone https://github.com/NitroBeast76/Windows-Rice.git
 cd Windows-Rice
 .\install.ps1
+```
+
+If Windows blocks the script the first time (the default execution policy does not allow downloaded scripts), run it via:
+
+```powershell
+PowerShell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+Or set the policy once for your user account:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ```
 
 The installer proceeds in this order:
@@ -155,7 +182,7 @@ The installer proceeds in this order:
 After a successful install:
 
 1. Close and reopen your terminal so PATH and font changes are picked up.
-2. Start (or restart) GlazeWM. YASB is launched by GlazeWM's `startup_commands`.
+2. Start (or restart) GlazeWM. YASB is launched automatically through GlazeWM's `startup_commands`.
 3. Restart Windows Terminal if it was already open.
 4. Only log out or reboot if something still does not refresh.
 
@@ -206,6 +233,29 @@ Everything is deployed under the current user's home directory. The installer re
 | Backups and manifest | `~/.windows-rice-backup/` |
 
 Fastfetch uses a single configuration location: `~/.config/fastfetch/`. The installer does not write a second copy under `%APPDATA%`.
+
+On a machine signed in with a Microsoft account, `~/Documents/` may resolve to the OneDrive-redirected path (`~/OneDrive/Documents/`). The installer uses the Windows API to resolve the effective Documents folder, so the profile is deployed wherever PowerShell 7 will actually look for it.
+
+---
+
+## Startup chain
+
+GlazeWM launches YASB from its own config, so there is only one startup mechanism and no risk of launching YASB twice:
+
+```
+Windows logon
+      │
+      ▼
+GlazeWM starts
+      │
+      ▼
+GlazeWM startup_commands → shell-exec → yasb.exe
+      │
+      ▼
+YASB loads ~/.config/yasb/config.yaml + styles.css
+```
+
+GlazeWM's `startup_commands` uses `shell-exec` because GlazeWM parses each entry as one of its own subcommands, not as a raw shell string. If YASB briefly shows the "GlazeWM is offline" label on cold boot, it reconnects within a few seconds once GlazeWM's IPC pipe is up.
 
 ---
 
@@ -339,6 +389,8 @@ Each wallpaper is deployed individually through the same backup path used by eve
 
 Deployment is recursive: if the repository contains subdirectories under `assets/wallpapers/`, those subdirectories are mirrored under `~/Pictures/Windows-Rice/`, and the backup layout mirrors them too.
 
+YASB's wallpapers widget points at `~/Pictures/Windows-Rice/` by default, so anything deployed there shows up in the gallery (Alt+W).
+
 **Current limitation:** wallpaper files that were deployed fresh — that is, they replaced nothing because no file of that name existed before — are left in place after uninstall. The backup system can only restore files it had a previous version to back up. The same rule applies to freshly deployed configuration files.
 
 The empty `~/Pictures/Windows-Rice/` directory is removed by uninstall only when it is empty.
@@ -378,9 +430,13 @@ Edits made to deployed files directly under `~/.config/`, `~/.glzr/`, or the Pow
 
 **Weather widget.** The YASB weather widget requires an API key and a location, which the repository does not ship. Users who want the weather widget to work must configure the `api_key` and `location` fields in `configs/yasb/default_yasb_config.yaml` (or the deployed `~/.config/yasb/config.yaml`). The installer does not create an account or embed a key on your behalf.
 
+**btop on PATH.** Winget installs `btop4win` as a portable package and adds its own package folder to PATH — but not the shared `Links` folder that holds the `btop.exe` alias. The result is that `btop4win` may be reachable while `btop` is not, until the `Links` folder is added to the user PATH. If `btop` is not found after install, close and reopen your terminal first; if it still fails, add `%LOCALAPPDATA%\Microsoft\WinGet\Links` to your user PATH manually.
+
 **Freshly deployed files are not removed by uninstall.** Files deployed by the installer that had no prior version on disk — configs or wallpapers — are left in place after uninstall. Only files that replaced an existing version can be restored.
 
 **JSONC in Windows Terminal settings.** If the existing Terminal `settings.json` contains comments that PowerShell's `ConvertFrom-Json` cannot parse, the merge is skipped and the file is left untouched. The installer does not attempt to strip comments or otherwise modify the file to force a merge.
+
+**PowerShell 5.1 execution policy.** Windows ships with a default policy that blocks scripts. If `.\install.ps1` fails with `UnauthorizedAccess`, use `PowerShell -ExecutionPolicy Bypass -File .\install.ps1` or set `RemoteSigned` for the current user, as described in the Installation section.
 
 ---
 
@@ -419,11 +475,6 @@ Upstream URLs are intentionally omitted here until they are verified for this re
 
 ## License
 
-Windows-Rice is released under the MIT License. See [`LICENSE`](LICENSE) for
-the full text.
+Windows-Rice is released under the MIT License. See [`LICENSE`](LICENSE) for the full text.
 
-The MIT License covers the PowerShell scripts, YAML/CSS/JSON configuration
-files, and other original content in this repository. It does not relicense
-third-party software that Windows-Rice installs or configures, nor the color
-palettes, fonts, or ASCII art sourced from other projects — those remain under
-their own licenses, and are acknowledged in [Credits](#credits) above.
+The MIT License covers the PowerShell scripts, YAML/CSS/JSON configuration files, and other original content in this repository. It does not relicense third-party software that Windows-Rice installs or configures, nor the color palettes, fonts, or ASCII art sourced from other projects — those remain under their own licenses, and are acknowledged in [Credits](#credits) above.
