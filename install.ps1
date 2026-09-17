@@ -21,7 +21,8 @@
 
 .PARAMETER SkipPackages
     Skip ALL package installation: winget, scoop, the Nerd Font, PSReadLine,
-    and the Thide check. Only configuration files are deployed.
+    and the extras (Thide, GlazeWM AutoTile, Flow Launcher, Windhawk). Only
+    configuration files are deployed.
 
 .PARAMETER SkipFonts
     Do not install the JetBrainsMono Nerd Font. Implied by -SkipPackages.
@@ -292,13 +293,15 @@ function Get-Manifest {
         Never throws: on parse failure, warns and starts fresh.
     #>
     $empty = [ordered]@{
-        version   = 1
-        created   = (Get-Date).ToUniversalTime().ToString('o')
-        updated   = (Get-Date).ToUniversalTime().ToString('o')
-        installed = [ordered]@{
+        version     = 1
+        created     = (Get-Date).ToUniversalTime().ToString('o')
+        updated     = (Get-Date).ToUniversalTime().ToString('o')
+        installed   = [ordered]@{
             winget = @()
             scoop  = @()
+            direct = @()
         }
+        preferences = [ordered]@{}
     }
 
     if (-not (Test-Path -LiteralPath $ManifestPath)) { return $empty }
@@ -312,19 +315,27 @@ function Get-Manifest {
     }
 
     $result = [ordered]@{
-        version   = 1
-        created   = (Get-Date).ToUniversalTime().ToString('o')
-        updated   = (Get-Date).ToUniversalTime().ToString('o')
-        installed = [ordered]@{
+        version     = 1
+        created     = (Get-Date).ToUniversalTime().ToString('o')
+        updated     = (Get-Date).ToUniversalTime().ToString('o')
+        installed   = [ordered]@{
             winget = @()
             scoop  = @()
+            direct = @()
         }
+        preferences = [ordered]@{}
     }
     if ($obj.version) { $result.version = $obj.version }
     if ($obj.created) { $result.created = $obj.created }
     if ($obj.installed) {
         if ($obj.installed.winget) { $result.installed.winget = @($obj.installed.winget) }
         if ($obj.installed.scoop)  { $result.installed.scoop  = @($obj.installed.scoop) }
+        if ($obj.installed.direct) { $result.installed.direct = @($obj.installed.direct) }
+    }
+    if ($obj.preferences) {
+        foreach ($k in $obj.preferences.PSObject.Properties.Name) {
+            $result.preferences[$k] = $obj.preferences.$k
+        }
     }
     return $result
 }
@@ -355,7 +366,7 @@ function Register-ManifestPackage {
         before this run. Idempotent across runs (no duplicates).
     #>
     param(
-        [Parameter(Mandatory)][ValidateSet('winget','scoop')][string]$Manager,
+        [Parameter(Mandatory)][ValidateSet('winget','scoop','direct')][string]$Manager,
         [Parameter(Mandatory)][string]$Id
     )
 
@@ -595,10 +606,6 @@ function Install-AllPackages {
         Write-WarnLine 'Skipping Scoop-based installs (Fastfetch).'
         Add-Summary 'Skipped' 'Fastfetch (Scoop unavailable)'
     }
-
-    Write-Section 'Thide'
-    Write-Skip 'Thide — installer not included in repository yet.'
-    Add-Summary 'Skipped' 'Thide (installer not bundled)'
 }
 
 # ================================================================== FONTS
@@ -653,6 +660,181 @@ function Install-RiceFont {
 
     Write-FailLine 'JetBrainsMono Nerd Font installation failed.'
     Add-Summary 'Failed' 'JetBrainsMono Nerd Font'
+}
+
+# ======================================================== EXTRAS (1.1)
+
+function Install-Thide {
+    <#
+        Thide — taskbar hide/show. Not on winget or scoop. Downloads the
+        pinned portable ZIP from GitHub releases and extracts to
+        ~/.local/bin/thide/. Enables autostart so the taskbar stays hidden
+        across logins.
+
+        To update: change $version below to match the release tag on
+        https://github.com/amnweb/thide/releases, and adjust the asset
+        filename if the naming convention changes.
+    #>
+    $thideDir = Join-Path $HomeDir '.local\bin\thide'
+    $thideExe = Join-Path $thideDir 'thide.exe'
+    $version  = '0.1.3'
+
+    Write-Section 'Thide'
+
+    if (Test-Path -LiteralPath $thideExe) {
+        Write-Skip 'Thide already installed'
+        Add-Summary 'AlreadyInstalled' 'Thide'
+        return
+    }
+
+    if ($DryRun) {
+        Write-Skip "would download Thide v$version (portable) and enable autostart"
+        Add-Summary 'Installed' 'Thide (dry run)'
+        return
+    }
+
+    $url = "https://github.com/amnweb/thide/releases/download/v$version/thide-$version-x64-portable.zip"
+    $zip = Join-Path $env:TEMP 'thide-portable.zip'
+
+    try {
+        Write-Info "downloading Thide v$version..."
+        Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing -ErrorAction Stop
+
+        New-Item -ItemType Directory -Path $thideDir -Force | Out-Null
+        Expand-Archive -Path $zip -DestinationPath $thideDir -Force -ErrorAction Stop
+        Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+
+        $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+        if ($userPath -notlike "*$thideDir*") {
+            [Environment]::SetEnvironmentVariable('Path', "$userPath;$thideDir", 'User')
+            Write-Info "Added $thideDir to user PATH"
+        }
+
+        # Register autostart so the taskbar stays hidden across reboots.
+        if (Test-Path -LiteralPath $thideExe) {
+            & $thideExe enable-autostart 2>&1 | Out-Null
+        }
+
+        Write-Ok 'Thide installed'
+        Add-Summary 'Installed' 'Thide'
+        Register-ManifestPackage -Manager 'direct' -Id 'thide'
+    } catch {
+        Write-FailLine "Thide — $_"
+        Add-Summary 'Failed' "Thide ($_)"
+    }
+}
+
+function Install-GlazeAutoTile {
+    <#
+        GlazeWM AutoTile — Python script that connects to GlazeWM's IPC
+        WebSocket and picks smarter split directions than the default row
+        behavior. Cloned from GitHub and run inside a dedicated venv.
+
+        Requires:
+        - git on PATH (used to clone the repo)
+        - Python 3.10+ on PATH (used to create the venv and install deps)
+        - GlazeWM IPC enabled (the config we ship already has this)
+
+        The entry point is assumed to be `glaze_autotile.py`. If the upstream
+        repo renames it, update $autotileEntry below.
+    #>
+    $autotileDir   = Join-Path $HomeDir '.local\share\glaze-autotile'
+    $venvDir       = Join-Path $autotileDir '.venv'
+    $autotileEntry = 'glaze_autotile.py'
+    $autotilePy    = Join-Path $autotileDir $autotileEntry
+    $pythonw       = Join-Path $venvDir 'Scripts\pythonw.exe'
+
+    Write-Section 'GlazeWM AutoTile'
+
+    if ((Test-Path -LiteralPath $autotilePy) -and (Test-Path -LiteralPath $pythonw)) {
+        Write-Skip 'GlazeWM AutoTile already installed'
+        Add-Summary 'AlreadyInstalled' 'GlazeWM AutoTile'
+        return
+    }
+
+    if (-not (Test-CommandExists 'git')) {
+        Write-WarnLine 'git not found — skipping GlazeWM AutoTile.'
+        Write-WarnLine 'Install git, then re-run this script.'
+        Add-Summary 'Skipped' 'GlazeWM AutoTile (git not found)'
+        return
+    }
+
+    if (-not (Test-CommandExists 'python')) {
+        Write-WarnLine 'Python not found — skipping GlazeWM AutoTile.'
+        Write-WarnLine 'Install Python 3.10+ and re-run to enable AutoTile.'
+        Add-Summary 'Skipped' 'GlazeWM AutoTile (Python not found)'
+        return
+    }
+
+    if ($DryRun) {
+        Write-Skip 'would clone AutoTile, create venv, install websockets'
+        Add-Summary 'Installed' 'GlazeWM AutoTile (dry run)'
+        return
+    }
+
+    try {
+        if (-not (Test-Path -LiteralPath $autotileDir)) {
+            New-Item -ItemType Directory -Path $autotileDir -Force | Out-Null
+        }
+
+        # Clone into a temp location, then move contents (so re-running on a
+        # partial install doesn't fail because the dir isn't empty).
+        $tmpClone = Join-Path $env:TEMP "glaze-autotile-$([guid]::NewGuid().ToString('N').Substring(0,8))"
+        Write-Info 'cloning AutoTile...'
+        & git clone --depth 1 https://github.com/aka-phrankie/GlazeWM_AutoTile.git $tmpClone 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "git clone exited $LASTEXITCODE" }
+
+        Copy-Item -Path (Join-Path $tmpClone '*') -Destination $autotileDir -Recurse -Force
+        Remove-Item -LiteralPath $tmpClone -Recurse -Force -ErrorAction SilentlyContinue
+
+        if (-not (Test-Path -LiteralPath $autotilePy)) {
+            throw "entry point '$autotileEntry' not found after clone"
+        }
+
+        Write-Info 'creating virtual environment...'
+        & python -m venv $venvDir 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "python -m venv exited $LASTEXITCODE" }
+
+        Write-Info 'installing websockets...'
+        $pip = Join-Path $venvDir 'Scripts\pip.exe'
+        & $pip install --quiet --upgrade pip 2>&1 | Out-Null
+        & $pip install --quiet websockets 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "pip install websockets exited $LASTEXITCODE" }
+
+        Write-Ok 'GlazeWM AutoTile installed'
+        Add-Summary 'Installed' 'GlazeWM AutoTile'
+        Register-ManifestPackage -Manager 'direct' -Id 'glaze-autotile'
+    } catch {
+        Write-FailLine "GlazeWM AutoTile — $_"
+        Add-Summary 'Failed' "GlazeWM AutoTile ($_)"
+    }
+}
+
+function Install-FlowLauncher {
+    if (-not (Test-CommandExists 'scoop')) {
+        Write-Skip 'Scoop unavailable — cannot install Flow Launcher'
+        Add-Summary 'Skipped' 'Flow Launcher (Scoop unavailable)'
+        return
+    }
+    Install-ScoopPackage -Name 'flow-launcher' -Display 'Flow Launcher'
+}
+
+function Install-Windhawk {
+    <#
+        Windhawk — mod platform for Windows shell components.
+        Installs the platform only. No mods are auto-installed; see README
+        for the reasoning (mods run in-process and can crash Explorer).
+    #>
+    Install-WingetPackage -Id 'RamenSoftware.Windhawk' -Name 'Windhawk'
+    Write-Info 'Windhawk installed. No mods are installed by default.'
+    Write-Info 'Open Windhawk to browse and install mods manually.'
+}
+
+function Install-Extras {
+    Install-Thide
+    Install-GlazeAutoTile
+    Install-FlowLauncher
+    Install-Windhawk
 }
 
 # ======================================================= CONFIG DEPLOYMENT
@@ -718,6 +900,71 @@ function Deploy-AllConfigs {
         -BackupSubdir 'powershell'
 }
 
+function Set-DefaultWallpaper {
+    <#
+        Sets the desktop wallpaper once, on the first run. Subsequent runs
+        respect whatever the user has chosen since.
+
+        Uses SystemParametersInfo (the Win32 API) rather than RUNDLL32,
+        because RUNDLL32 is unreliable on Windows 10/11 and doesn't always
+        commit the change to the registry.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$ImagePath,
+        [Parameter(Mandatory)]$Manifest
+    )
+
+    if ($Manifest.preferences -and $Manifest.preferences.default_wallpaper_set) {
+        Write-Skip 'Default wallpaper already applied on a previous run'
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $ImagePath)) {
+        Write-WarnLine "Default wallpaper not found: $ImagePath"
+        return
+    }
+
+    if ($DryRun) {
+        Write-Skip "would set desktop wallpaper to $(Split-Path -Leaf $ImagePath)"
+        return
+    }
+
+    try {
+        if (-not ('WinWallpaper' -as [type])) {
+            Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public class WinWallpaper {
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int SystemParametersInfo(int uAction, int uParam, string lpvParam, int fuWinIni);
+}
+"@ -ErrorAction Stop
+        }
+
+        $SPI_SETDESKWALLPAPER = 0x0014
+        $SPIF_UPDATEINIFILE   = 0x01
+        $SPIF_SENDCHANGE      = 0x02
+
+        $result = [WinWallpaper]::SystemParametersInfo(
+            $SPI_SETDESKWALLPAPER, 0, $ImagePath,
+            ($SPIF_UPDATEINIFILE -bor $SPIF_SENDCHANGE))
+
+        if ($result -ne 0) {
+            Write-Ok "Desktop wallpaper set: $(Split-Path -Leaf $ImagePath)"
+
+            if (-not $Manifest.preferences) {
+                $Manifest.preferences = [ordered]@{}
+            }
+            $Manifest.preferences.default_wallpaper_set = $true
+            Save-Manifest -Manifest $Manifest
+        } else {
+            Write-WarnLine 'SystemParametersInfo returned 0 — wallpaper unchanged'
+        }
+    } catch {
+        Write-WarnLine "Could not set wallpaper: $_"
+    }
+}
+
 function Deploy-Wallpapers {
     <#
         Deploy bundled wallpapers one file at a time via Backup-And-Deploy so
@@ -725,6 +972,9 @@ function Deploy-Wallpapers {
         Backup subdir mirrors the wallpaper's relative path under
         assets/wallpapers/, e.g. assets/wallpapers/dark/x.jpg →
         ~/.windows-rice-backup/wallpapers/dark/x.jpg.backup-<ts>.
+
+        After deployment, a file named `default.*` (any image extension) is
+        set as the desktop wallpaper on first run.
     #>
     Write-Section 'Wallpapers'
 
@@ -755,6 +1005,19 @@ function Deploy-Wallpapers {
             -Destination  $destination `
             -Label        "Wallpaper: $relative" `
             -BackupSubdir $backupSubdir | Out-Null
+    }
+
+    # Set a default wallpaper on first run.
+    $manifest = if ($script:Manifest) { $script:Manifest } else { Get-Manifest }
+    $script:Manifest = $manifest
+
+    $default = Get-ChildItem -LiteralPath $src -File `
+                    -Filter 'default.*' -ErrorAction SilentlyContinue |
+                Select-Object -First 1
+
+    if ($default) {
+        Set-DefaultWallpaper -ImagePath (Join-Path $WallpaperDir $default.Name) `
+                             -Manifest $manifest
     }
 }
 
@@ -1110,7 +1373,8 @@ function Invoke-Verification {
         'yt-dlp',
         'cava',
         'glazewm',
-        'yasb'
+        'yasb',
+        'thide'
     )
 
     foreach ($cmd in $commands) {
@@ -1193,9 +1457,10 @@ function Write-FinalSummary {
     Write-Host '  Next steps' -ForegroundColor Cyan
     Write-Host '    1. Close and reopen your terminal so PATH and font changes are loaded.' -ForegroundColor Gray
     Write-Host '    2. Start (or restart) GlazeWM.' -ForegroundColor Gray
-    Write-Host '    3. YASB will launch automatically through GlazeWM.' -ForegroundColor Gray
-    Write-Host '    4. If Windows Terminal was already running, restart it.' -ForegroundColor Gray
-    Write-Host '    5. Log out or restart Windows only if something still does not refresh.' -ForegroundColor Gray
+    Write-Host '    3. YASB and GlazeWM AutoTile launch automatically through GlazeWM.' -ForegroundColor Gray
+    Write-Host '    4. Thide hides the taskbar on next login.' -ForegroundColor Gray
+    Write-Host '    5. If Windows Terminal was already running, restart it.' -ForegroundColor Gray
+    Write-Host '    6. Log out or restart Windows only if something still does not refresh.' -ForegroundColor Gray
     Write-Host ''
 
     Write-Separator
@@ -1248,14 +1513,23 @@ if (-not $SkipFonts) {
     Add-Summary 'Skipped' 'JetBrainsMono Nerd Font (package installation disabled)'
 }
 
-# 3. Configs ----------------------------------------------------------------
+# 3. Extras (Thide, AutoTile, Flow Launcher, Windhawk) ---------------------
+if (-not $SkipPackages) {
+    Install-Extras
+} else {
+    Write-Section 'Extras'
+    Write-Skip 'Skipping Thide, AutoTile, Flow Launcher, Windhawk (-SkipPackages)'
+    Add-Summary 'Skipped' 'Extras (Thide, AutoTile, Flow Launcher, Windhawk)'
+}
+
+# 4. Configs ----------------------------------------------------------------
 Deploy-AllConfigs
 Deploy-Wallpapers
 
-# 4. PSReadLine -------------------------------------------------------------
+# 5. PSReadLine -------------------------------------------------------------
 Ensure-PSReadLine -NoInstall:$SkipPSReadLineInstall
 
-# 5. Windows Terminal -------------------------------------------------------
+# 6. Windows Terminal -------------------------------------------------------
 if (-not $SkipTerminal) {
     Update-WindowsTerminalConfig -RepoSettingsPath (Join-Path $ConfigRoot 'terminal\settings.json')
 } else {
@@ -1264,8 +1538,8 @@ if (-not $SkipTerminal) {
     Add-Summary 'Skipped' 'Windows Terminal (-SkipTerminal)'
 }
 
-# 6. Verification -----------------------------------------------------------
+# 7. Verification -----------------------------------------------------------
 Invoke-Verification
 
-# 7. Summary ----------------------------------------------------------------
+# 8. Summary ----------------------------------------------------------------
 Write-FinalSummary
