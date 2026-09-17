@@ -914,18 +914,18 @@ function Set-DefaultWallpaper {
         [Parameter(Mandatory)]$Manifest
     )
 
-    if ($Manifest.preferences -and $Manifest.preferences.default_wallpaper_set) {
+        if ($Manifest.preferences -and $Manifest.preferences.default_wallpaper_set) {
         Write-Skip 'Default wallpaper already applied on a previous run'
-        return
-    }
-
-    if (-not (Test-Path -LiteralPath $ImagePath)) {
-        Write-WarnLine "Default wallpaper not found: $ImagePath"
         return
     }
 
     if ($DryRun) {
         Write-Skip "would set desktop wallpaper to $(Split-Path -Leaf $ImagePath)"
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $ImagePath)) {
+        Write-WarnLine "Default wallpaper not found: $ImagePath"
         return
     }
 
