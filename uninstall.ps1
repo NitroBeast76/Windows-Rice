@@ -18,6 +18,10 @@
     - direct   — installed by the rice itself from a pinned source
                  (Thide from GitHub releases, GlazeWM AutoTile from git)
 
+    General-purpose tools (PowerShell 7, Windows Terminal) are never removed,
+    even if the manifest records them. Removing PowerShell 7 breaks Windows
+    Terminal, which is configured to launch it as the default profile.
+
     Windows Terminal's settings.json is restored from its backup. If no backup
     exists, the file is left untouched.
 
@@ -668,6 +672,20 @@ function Uninstall-AllPackages {
     }
 
     # -------- winget ------------------------------------------------------
+    #
+    # Some packages are never removed, even if the manifest records that the
+    # installer put them there. These are general-purpose tools users are
+    # likely to keep. Removing Microsoft.PowerShell in particular leaves
+    # Windows Terminal without its default profile (pwsh.exe), which breaks
+    # every attempt to open a terminal until PowerShell is reinstalled.
+    #
+    # To force-remove one of these, do it manually:
+    #   winget uninstall --id <Id> --exact
+    $wingetKeep = @(
+        'Microsoft.PowerShell',
+        'Microsoft.WindowsTerminal'
+    )
+
     $wingetIds = @($manifest.winget)
     if ($wingetIds.Count -eq 0) {
         Write-Skip 'No winget packages recorded in manifest'
@@ -675,11 +693,12 @@ function Uninstall-AllPackages {
         Write-WarnLine 'winget is not available — skipping winget package removal.'
         Add-Summary 'Warnings' 'winget not available (package removal skipped)'
     } else {
-        # NOTE: PowerShell 7 and Windows Terminal are never in the manifest
-        # because install.ps1 registers a package only on the success path of
-        # an actual install. If a future change ever records them, this loop
-        # will still uninstall them; today they are simply not present.
         foreach ($id in $wingetIds) {
+            if ($wingetKeep -contains $id) {
+                Write-Skip "$id — kept intentionally (general-purpose tool)"
+                Add-Summary 'Skipped' "$id (kept intentionally)"
+                continue
+            }
             Uninstall-WingetPackage -Id $id -Name $id
         }
     }
