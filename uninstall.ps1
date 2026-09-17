@@ -12,6 +12,12 @@
     only for packages it installed on the current machine. Packages that were
     already present before the rice installer ran are NOT removed.
 
+    Three categories of package are tracked:
+    - winget   — installed via winget (PowerShell 7, Windows Terminal, etc.)
+    - scoop    — installed via scoop  (Fastfetch, Nerd Font, Flow Launcher)
+    - direct   — installed by the rice itself from a pinned source
+                 (Thide from GitHub releases, GlazeWM AutoTile from git)
+
     Windows Terminal's settings.json is restored from its backup. If no backup
     exists, the file is left untouched.
 
@@ -66,6 +72,10 @@ $CavaConfigPath      = Join-Path $HomeDir '.config\cava\config'
 $FastfetchConfigPath = Join-Path $HomeDir '.config\fastfetch\config.jsonc'
 $FastfetchAsciiPath  = Join-Path $HomeDir '.config\fastfetch\ascii.txt'
 $WallpaperDir        = Join-Path $HomeDir 'Pictures\Windows-Rice'
+
+# Direct install locations (must match install.ps1).
+$ThideDir      = Join-Path $HomeDir '.local\bin\thide'
+$AutoTileDir   = Join-Path $HomeDir '.local\share\glaze-autotile'
 
 $BackupRoot = Join-Path $HomeDir '.windows-rice-backup'
 $ManifestPath = Join-Path $BackupRoot 'manifest.json'
@@ -254,6 +264,7 @@ function Read-Manifest {
     $result = [ordered]@{
         winget = if ($obj.installed.winget) { @($obj.installed.winget) } else { @() }
         scoop  = if ($obj.installed.scoop)  { @($obj.installed.scoop)  } else { @() }
+        direct = if ($obj.installed.direct) { @($obj.installed.direct) } else { @() }
     }
     return $result
 }
@@ -271,6 +282,7 @@ function Write-ManifestBlock {
 
     $wingetCount = @($Manifest.winget).Count
     $scoopCount  = @($Manifest.scoop).Count
+    $directCount = @($Manifest.direct).Count
 
     $fonts = @($Manifest.scoop | Where-Object { $_ -match 'NF' -or $_ -match 'NerdFont' })
     $fontCount = $fonts.Count
@@ -280,6 +292,9 @@ function Write-ManifestBlock {
     Write-Host ('    ' + 'Scoop packages'.PadRight(20) + $scoopCount) -ForegroundColor Gray
     if ($fontCount -gt 0) {
         Write-Host ('    ' + 'Nerd Fonts'.PadRight(20) + $fontCount) -ForegroundColor Gray
+    }
+    if ($directCount -gt 0) {
+        Write-Host ('    ' + 'Direct installs'.PadRight(20) + $directCount) -ForegroundColor Gray
     }
     Write-Host ''
 }
@@ -402,6 +417,96 @@ function Uninstall-ScoopPackage {
 
     Write-FailLine "$Display — scoop exit $LASTEXITCODE"
     Add-Summary 'Failed' "$Display (scoop exit $LASTEXITCODE)"
+}
+
+function Uninstall-DirectPackage {
+    <#
+        Removes packages the rice installed from pinned sources (Thide,
+        GlazeWM AutoTile). Each entry in the manifest's `installed.direct`
+        array has its own cleanup routine because the shape of "uninstall"
+        depends on how the thing was installed.
+
+        Adding a new direct install requires:
+        1. Registering it in install.ps1's Install-Extras
+        2. Adding a case for its Id here
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Id
+    )
+
+    switch ($Id) {
+        'thide' {
+            # Stop the process, disable autostart, remove the folder,
+            # drop the PATH entry.
+            if ($DryRun) {
+                Write-Skip 'would remove Thide'
+                Add-Summary 'Uninstalled' 'Thide (dry run)'
+                return
+            }
+
+            $exe = Join-Path $ThideDir 'thide.exe'
+            if (Test-Path -LiteralPath $exe) {
+                try {
+                    & $exe disable-autostart 2>&1 | Out-Null
+                    & $exe stop              2>&1 | Out-Null
+                } catch {
+                    # Best effort — if the CLI refuses, keep going.
+                }
+            }
+
+            if (Test-Path -LiteralPath $ThideDir) {
+                try {
+                    Remove-Item -LiteralPath $ThideDir -Recurse -Force -ErrorAction Stop
+                } catch {
+                    Write-FailLine "Thide — could not remove $ThideDir — $_"
+                    Add-Summary 'Failed' "Thide ($_)"
+                    return
+                }
+            }
+
+            # Drop the PATH entry that Install-Thide added.
+            $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+            if ($userPath -like "*$ThideDir*") {
+                $parts = @($userPath -split ';' |
+                            Where-Object { $_ -ne '' -and $_ -ine $ThideDir })
+                [Environment]::SetEnvironmentVariable('Path', ($parts -join ';'), 'User')
+                Write-Info "Removed $ThideDir from user PATH"
+            }
+
+            Write-Ok 'removed: Thide'
+            Add-Summary 'Uninstalled' 'Thide'
+        }
+        'glaze-autotile' {
+            if ($DryRun) {
+                Write-Skip 'would remove GlazeWM AutoTile'
+                Add-Summary 'Uninstalled' 'GlazeWM AutoTile (dry run)'
+                return
+            }
+
+            # AutoTile runs as a child of GlazeWM. If GlazeWM is running,
+            # killing pythonw here would kill the AutoTile process; the
+            # parent GlazeWM will relaunch it on next start unless the
+            # config is also reverted. Config restore is handled by
+            # Restore-AllConfigs earlier in the script.
+            if (Test-Path -LiteralPath $AutoTileDir) {
+                try {
+                    Remove-Item -LiteralPath $AutoTileDir -Recurse -Force -ErrorAction Stop
+                    Write-Ok 'removed: GlazeWM AutoTile'
+                    Add-Summary 'Uninstalled' 'GlazeWM AutoTile'
+                } catch {
+                    Write-FailLine "GlazeWM AutoTile — could not remove $AutoTileDir — $_"
+                    Add-Summary 'Failed' "GlazeWM AutoTile ($_)"
+                }
+            } else {
+                Write-Skip 'GlazeWM AutoTile was not installed'
+                Add-Summary 'Skipped' 'GlazeWM AutoTile (not installed)'
+            }
+        }
+        default {
+            Write-WarnLine "No uninstall handler for direct package '$Id' — skipping"
+            Add-Summary 'Warnings' "$Id (no uninstall handler)"
+        }
+    }
 }
 
 # ================================================================== SECTIONS
@@ -589,6 +694,19 @@ function Uninstall-AllPackages {
     } else {
         foreach ($id in $scoopIds) {
             Uninstall-ScoopPackage -Name $id -Display $id
+        }
+    }
+
+    # -------- direct (Thide, AutoTile) ------------------------------------
+    $directIds = @($manifest.direct)
+    if ($directIds.Count -eq 0) {
+        Write-Host ''
+        Write-Skip 'No direct installs recorded in manifest'
+    } else {
+        Write-Host ''
+        Write-Info 'Direct installs'
+        foreach ($id in $directIds) {
+            Uninstall-DirectPackage -Id $id
         }
     }
 }
