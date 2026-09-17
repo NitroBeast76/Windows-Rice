@@ -500,6 +500,18 @@ function Add-ScoopBucket {
         return
     }
 
+    # Check whether the bucket already exists. This avoids relying on
+    # parsing scoop's stderr, which PowerShell 5.1 doesn't capture reliably.
+    try {
+        $existing = (& scoop bucket list 2>&1 | Out-String)
+        if ($existing -match "(?m)^\s*$([regex]::Escape($Bucket))\s") {
+            Write-Skip "scoop bucket '$Bucket' already present"
+            return
+        }
+    } catch {
+        # Fall through to attempt the add
+    }
+
     try {
         $out = (& scoop bucket add $Bucket 2>&1 | Out-String)
     } catch {
@@ -508,12 +520,15 @@ function Add-ScoopBucket {
         return
     }
 
-    if ($out -match 'already exists') {
-        Write-Skip "scoop bucket '$Bucket' already present"
-        return
-    }
     if ($LASTEXITCODE -eq 0) {
         Write-Ok "scoop bucket '$Bucket' added"
+        return
+    }
+
+    # Belt and braces: even if $out didn't capture it, the LASTEXITCODE
+    # for "already exists" is 2 and scoop's output mentions it.
+    if ($LASTEXITCODE -eq 2) {
+        Write-Skip "scoop bucket '$Bucket' already present"
         return
     }
 
@@ -605,6 +620,18 @@ function Install-AllPackages {
     } else {
         Write-WarnLine 'Skipping Scoop-based installs (Fastfetch).'
         Add-Summary 'Skipped' 'Fastfetch (Scoop unavailable)'
+    }
+
+    # Ensure winget's portable-package links folder is on the user PATH.
+    # winget doesn't always add this on first portable install, which is why
+    # "btop" may not resolve even though "btop4win" does.
+    $links = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'
+    if (Test-Path -LiteralPath $links) {
+        $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+        if ($userPath -notlike "*$links*") {
+            [Environment]::SetEnvironmentVariable('Path', "$userPath;$links", 'User')
+            Write-Info "Added winget Links folder to user PATH"
+        }
     }
 }
 
@@ -759,9 +786,25 @@ function Install-GlazeAutoTile {
         return
     }
 
-    if (-not (Test-CommandExists 'python')) {
-        Write-WarnLine 'Python not found — skipping GlazeWM AutoTile.'
-        Write-WarnLine 'Install Python 3.10+ and re-run to enable AutoTile.'
+    # Check that python.exe is a real interpreter, not the Windows Store
+    # stub that exists by default on Windows 10/11 (it exits with 9009
+    # when actually run and can't create a venv).
+    $pythonOk = $false
+    if (Test-CommandExists 'python') {
+        try {
+            $pyOut = (& python --version 2>&1 | Out-String).Trim()
+            if ($LASTEXITCODE -eq 0 -and $pyOut -match 'Python \d+\.\d+') {
+                $pythonOk = $true
+            }
+        } catch {
+            $pythonOk = $false
+        }
+    }
+
+    if (-not $pythonOk) {
+        Write-WarnLine 'Python not found (or the Windows Store stub is shadowing it).'
+        Write-WarnLine 'Install real Python 3.10+ from https://www.python.org/downloads/'
+        Write-WarnLine 'and re-run this script to enable AutoTile.'
         Add-Summary 'Skipped' 'GlazeWM AutoTile (Python not found)'
         return
     }
@@ -826,8 +869,10 @@ function Install-Windhawk {
         for the reasoning (mods run in-process and can crash Explorer).
     #>
     Install-WingetPackage -Id 'RamenSoftware.Windhawk' -Name 'Windhawk'
-    Write-Info 'Windhawk installed. No mods are installed by default.'
-    Write-Info 'Open Windhawk to browse and install mods manually.'
+    if (-not $DryRun) {
+        Write-Info 'Windhawk installed. No mods are installed by default.'
+        Write-Info 'Open Windhawk to browse and install mods manually.'
+    }
 }
 
 function Install-Extras {
@@ -914,7 +959,7 @@ function Set-DefaultWallpaper {
         [Parameter(Mandatory)]$Manifest
     )
 
-        if ($Manifest.preferences -and $Manifest.preferences.default_wallpaper_set) {
+    if ($Manifest.preferences -and $Manifest.preferences.default_wallpaper_set) {
         Write-Skip 'Default wallpaper already applied on a previous run'
         return
     }
