@@ -497,23 +497,39 @@ If no manifest is present, `-RemovePackages` prints a warning and performs no re
 
 ## Wallpapers
 
-Wallpapers placed under `assets/wallpapers/` are deployed to:
+The repository ships a small set of Catppuccin-compatible wallpapers under
+`assets/wallpapers/`. The installer deploys them to `~/Pictures/Windows-Rice/`,
+and sets `default.jpg` as the desktop wallpaper on first install.
 
-```text
-~/Pictures/Windows-Rice/
-```
+YASB's wallpapers widget points at that folder by default, so everything shows
+up in the gallery (`Alt+W`).
 
-Each wallpaper is deployed individually through the same backup path used by every other managed file. If a file with the same destination name already exists, it is backed up before being replaced. During uninstallation, backed-up originals are restored.
+Each wallpaper is deployed through the same backup path as every other managed
+file. If a file with the same destination name already exists, it is backed up
+before being replaced. During uninstallation, backed-up originals are restored.
 
-Deployment is recursive: if the repository contains subdirectories under `assets/wallpapers/`, those subdirectories are mirrored under `~/Pictures/Windows-Rice/`, and the backup layout mirrors them too.
+Deployment is recursive: subdirectories under `assets/wallpapers/` are mirrored
+under `~/Pictures/Windows-Rice/`, and the backup layout mirrors them too.
 
-YASB's wallpapers widget points at `~/Pictures/Windows-Rice/` by default, so anything deployed there shows up in the gallery (Alt+W).
+**Current limitation:** wallpapers deployed fresh — that is, they replaced
+nothing because no file of that name existed before — are left in place after
+uninstall. The backup system can only restore files it had a previous version
+to back up. The same rule applies to freshly deployed configuration files.
 
-**Current limitation:** wallpaper files that were deployed fresh — that is, they replaced nothing because no file of that name existed before — are left in place after uninstall. The backup system can only restore files it had a previous version to back up. The same rule applies to freshly deployed configuration files.
+The empty `~/Pictures/Windows-Rice/` directory is removed by uninstall only
+when it is empty.
 
-The empty `~/Pictures/Windows-Rice/` directory is removed by uninstall only when it is empty.
+### More wallpapers
 
-The repository does not currently ship wallpapers. When files are added under `assets/wallpapers/`, the installer deploys them; the uninstaller restores any that were replaced.
+The bundled set is intentionally small — enough to get started without bloating
+the repository. Two larger collections worth browsing:
+
+- [SleepyCatHey/CozyPixels](https://github.com/SleepyCatHey/CozyPixels/tree/main/Catppuccin) — hundreds of Catppuccin-compatible wallpapers, organized by category
+- [AEON-mod/My-Visuals](https://github.com/AEON-mod/My-Visuals) — themed collections; the `dark_amoled` and `cozy_cold` folders fit this rice best
+
+To add your own, drop them into `assets/wallpapers/` before running
+`install.ps1`, or copy them into `~/Pictures/Windows-Rice/` after install.
+YASB picks up new files in the gallery automatically.
 
 ---
 
