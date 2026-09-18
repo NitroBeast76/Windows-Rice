@@ -179,12 +179,130 @@ The installer proceeds in this order:
 10. Verifies deployed files and command availability.
 11. Prints a categorised summary: Installed, AlreadyInstalled, Configured, Skipped, Warnings, Failed.
 
-After a successful install:
+---
 
-1. Close and reopen your terminal so PATH and font changes are picked up.
-2. Start (or restart) GlazeWM. YASB is launched automatically through GlazeWM's `startup_commands`.
-3. Restart Windows Terminal if it was already open.
-4. Only log out or reboot if something still does not refresh.
+## After the install
+
+The installer puts everything on disk, but three components need a first
+launch before they do anything useful. Do these in order.
+
+### 1. Open a new terminal
+
+Close the terminal you ran the installer in and open a fresh one. This loads
+the updated PATH and picks up the Nerd Font.
+
+### 2. Start GlazeWM
+
+```powershell
+glazewm
+```
+
+GlazeWM reads its config on startup and launches two things for you:
+
+- **YASB** — the status bar
+- **GlazeWM AutoTile** — the tiling helper
+
+You should see the bar appear at the top of your screen within a second or two.
+If AutoTile didn't install (see *Current Limitations*), GlazeWM still works —
+it just tiles the default way.
+
+Once GlazeWM is running, `Alt+Shift+E` exits it, and `Alt+Shift+R` reloads the
+config (useful after you edit `~/.glzr/glazewm/config.yaml`).
+
+### 3. Configure Flow Launcher
+
+Open **Flow Launcher** from the Start Menu. Its first run walks you through
+theme selection and program indexing. Once set up, **Alt+Space** opens it —
+that binding is free because GlazeWM's `wm-cycle-focus` was moved to `Alt+\``.
+See `configs/glazewm/default_glazewm_config.yaml` if you want to change either.
+
+Flow Launcher replaces the taskbar's Start menu search. Since Thide hides the
+taskbar, this is the main way to launch programs by name.
+
+Flow Launcher does not install a command-line shim, so there is no `flow`
+command — launch it from the Start Menu or via its own hotkey.
+
+### 4. Configure Windhawk
+
+Open **Windhawk** from the Start Menu. Its UI opens for browsing and installing
+mods. **No mods are installed by default** — the installer only puts the
+platform in place.
+
+Windhawk runs mods inside Windows system processes and can crash Explorer if a
+mod misbehaves. Install them one at a time and test between each. Good starting
+points:
+
+- `explorer-frame-styler` — subtle Explorer theming
+- `start-menu-styler` — Start menu theming
+
+Taskbar-related mods are not useful here because Thide hides the taskbar.
+
+Like Flow Launcher, Windhawk installs no command-line shim. Launch it from the
+Start Menu.
+
+### 5. Log out if something is still stale
+
+Fonts and some shell extensions only refresh at login. If the terminal font
+looks wrong after step 1, log out and back in.
+
+---
+
+## CLI tools
+
+The installer brings in a set of terminal utilities. None of them require
+setup — they just work from any shell once PATH has been refreshed.
+
+| Tool | What it does | Try it |
+|---|---|---|
+| `fastfetch` | System info on shell start | `fastfetch` |
+| `btop` | Resource monitor (CPU, RAM, disk, net) | `btop` |
+| `fd` | `find`, but nicer | `fd config` |
+| `rg` | `grep`, but faster | `rg "TODO" .` |
+| `fzf` | Fuzzy finder (pipe anything into it) | `ls \| fzf` |
+| `zoxide` | Smart `cd` that learns your habits | `z project` after `cd`-ing once |
+| `yazi` | Terminal file manager | `yazi` |
+| `yt-dlp` | Download video/audio from the web | `yt-dlp <url>` |
+| `ffmpeg` | Media conversion toolkit | `ffmpeg -i in.mp4 out.mkv` |
+| `7z` | Archive tool | `7z x archive.zip` |
+| `jq` | JSON processor | `curl ... \| jq .` |
+| `magick` | Image manipulation | `magick input.png -resize 50% out.png` |
+| `cava` | Audio visualizer | (runs inside YASB — no need to launch) |
+| `thide` | Hide/show the Windows taskbar | `thide hide` / `thide show` |
+
+### A few that change how you work
+
+**`zoxide`** learns from where you `cd`. After a few days of normal use,
+`z proj` jumps to whatever project directory you visit most often. Add it to
+your profile with `zoxide init powershell | Out-String | Invoke-Expression` if
+you want tab completion for `z` and `zi`.
+
+**`fzf`** is most useful piped. `git branch | fzf` picks a branch,
+`cat file | fzf` searches inside it. Running `fzf` bare opens a file selector
+in the current directory.
+
+**`yazi`** is a full file manager with previews, archives, and batch operations.
+Default keybinds follow Vim: `hjkl` to move, `Enter` to open, `y` to yank,
+`p` to paste. Press `~` inside it for a cheat sheet.
+
+**`magick`** is also what the rice uses to resize wallpapers before deploying
+them. To prep your own:
+
+```powershell
+magick input.jpg -resize 1920x -strip "$HOME\Pictures\Windows-Rice\my-wallpaper.jpg"
+```
+
+That caps the width at 1920, preserves aspect ratio, and strips metadata.
+
+### Verifying a tool is on PATH
+
+If a command says *"not recognized"*, close and reopen your terminal first. If
+it still fails, check the tool's install with:
+
+```powershell
+winget list --id sharkdp.fd --exact   # example
+```
+
+and see *Current Limitations* for known PATH quirks (btop in particular).
 
 ---
 
