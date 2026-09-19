@@ -21,7 +21,7 @@
 
 .PARAMETER SkipPackages
     Skip ALL package installation: winget, scoop, the Nerd Font, PSReadLine,
-    and the extras (Thide, GlazeWM AutoTile, Flow Launcher, Windhawk). Only
+    and the extras (Thide, GlazeWM AutoTiler, Flow Launcher, Windhawk). Only
     configuration files are deployed.
 
 .PARAMETER SkipFonts
@@ -75,7 +75,12 @@ $YasbDir       = Join-Path $HomeDir '.config\yasb'
 $GlazeWmDir    = Join-Path $HomeDir '.glzr\glazewm'
 $CavaDir       = Join-Path $HomeDir '.config\cava'
 $FastfetchDir  = Join-Path $HomeDir '.config\fastfetch'
-$WallpaperDir  = Join-Path $HomeDir 'Pictures\Windows-Rice'
+
+# Resolve the effective Pictures folder via the Windows API so this works
+# on both local accounts and Microsoft accounts with OneDrive redirection.
+$PicturesDir   = [Environment]::GetFolderPath('MyPictures')
+$WallpaperDir  = Join-Path $PicturesDir 'Windows-Rice'
+
 $BackupRoot    = Join-Path $HomeDir '.windows-rice-backup'
 $ManifestPath  = Join-Path $BackupRoot 'manifest.json'
 
@@ -751,105 +756,61 @@ function Install-Thide {
     }
 }
 
-function Install-GlazeAutoTile {
+function Install-GlazeAutoTiler {
     <#
-        GlazeWM AutoTile — Python script that connects to GlazeWM's IPC
-        WebSocket and picks smarter split directions than the default row
-        behavior. Cloned from GitHub and run inside a dedicated venv.
+        GlazeWM AutoTiler — a tray application that provides Master-Stack and
+        Dwindle layouts for GlazeWM. Distributed as a pre-built .exe, so no
+        Python, git, or venv are required.
 
-        Requires:
-        - git on PATH (used to clone the repo)
-        - Python 3.10+ on PATH (used to create the venv and install deps)
-        - GlazeWM IPC enabled (the config we ship already has this)
+        The no-console build is used for daily use. A console build exists for
+        debugging; it is not installed by default.
 
-        The entry point is assumed to be `glaze_autotile.py`. If the upstream
-        repo renames it, update $autotileEntry below.
+        To update: change $version below to match the release tag on
+        https://github.com/orbi-tal/glaze-autotiler/releases, and adjust the
+        asset filename if the naming convention changes.
+
+        Config and layout scripts live under
+        %USERPROFILE%\.config\glaze-autotiler\ and are created automatically
+        on the first run. That folder is not managed by this installer.
     #>
-    $autotileDir   = Join-Path $HomeDir '.local\share\glaze-autotile'
-    $venvDir       = Join-Path $autotileDir '.venv'
-    $autotileEntry = 'glaze_autotile.py'
-    $autotilePy    = Join-Path $autotileDir $autotileEntry
-    $pythonw       = Join-Path $venvDir 'Scripts\pythonw.exe'
+    $autotilerDir = Join-Path $HomeDir '.local\bin\glaze-autotiler'
+    $autotilerExe = Join-Path $autotilerDir 'glaze-autotiler.exe'
+    $version      = '1.0.4'
 
-    Write-Section 'GlazeWM AutoTile'
+    Write-Section 'GlazeWM AutoTiler'
 
-    if ((Test-Path -LiteralPath $autotilePy) -and (Test-Path -LiteralPath $pythonw)) {
-        Write-Skip 'GlazeWM AutoTile already installed'
-        Add-Summary 'AlreadyInstalled' 'GlazeWM AutoTile'
-        return
-    }
-
-    if (-not (Test-CommandExists 'git')) {
-        Write-WarnLine 'git not found — skipping GlazeWM AutoTile.'
-        Write-WarnLine 'Install git, then re-run this script.'
-        Add-Summary 'Skipped' 'GlazeWM AutoTile (git not found)'
-        return
-    }
-
-    # Check that python.exe is a real interpreter, not the Windows Store
-    # stub that exists by default on Windows 10/11 (it exits with 9009
-    # when actually run and can't create a venv).
-    $pythonOk = $false
-    if (Test-CommandExists 'python') {
-        try {
-            $pyOut = (& python --version 2>&1 | Out-String).Trim()
-            if ($LASTEXITCODE -eq 0 -and $pyOut -match 'Python \d+\.\d+') {
-                $pythonOk = $true
-            }
-        } catch {
-            $pythonOk = $false
-        }
-    }
-
-    if (-not $pythonOk) {
-        Write-WarnLine 'Python not found (or the Windows Store stub is shadowing it).'
-        Write-WarnLine 'Install real Python 3.10+ from https://www.python.org/downloads/'
-        Write-WarnLine 'and re-run this script to enable AutoTile.'
-        Add-Summary 'Skipped' 'GlazeWM AutoTile (Python not found)'
+    if (Test-Path -LiteralPath $autotilerExe) {
+        Write-Skip 'GlazeWM AutoTiler already installed'
+        Add-Summary 'AlreadyInstalled' 'GlazeWM AutoTiler'
         return
     }
 
     if ($DryRun) {
-        Write-Skip 'would clone AutoTile, create venv, install websockets'
-        Add-Summary 'Installed' 'GlazeWM AutoTile (dry run)'
+        Write-Skip "would download GlazeWM AutoTiler v$version and add to PATH"
+        Add-Summary 'Installed' 'GlazeWM AutoTiler (dry run)'
         return
     }
 
+    $url = "https://github.com/orbi-tal/glaze-autotiler/releases/download/v$version/glaze-autotiler-$version.exe"
+
     try {
-        if (-not (Test-Path -LiteralPath $autotileDir)) {
-            New-Item -ItemType Directory -Path $autotileDir -Force | Out-Null
+        Write-Info "downloading GlazeWM AutoTiler v$version..."
+        New-Item -ItemType Directory -Path $autotilerDir -Force | Out-Null
+        Invoke-WebRequest -Uri $url -OutFile $autotilerExe -UseBasicParsing -ErrorAction Stop
+
+        # Add the folder to the user PATH (idempotent).
+        $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+        if ($userPath -notlike "*$autotilerDir*") {
+            [Environment]::SetEnvironmentVariable('Path', "$userPath;$autotilerDir", 'User')
+            Write-Info "Added $autotilerDir to user PATH"
         }
 
-        # Clone into a temp location, then move contents (so re-running on a
-        # partial install doesn't fail because the dir isn't empty).
-        $tmpClone = Join-Path $env:TEMP "glaze-autotile-$([guid]::NewGuid().ToString('N').Substring(0,8))"
-        Write-Info 'cloning AutoTile...'
-        & git clone --depth 1 https://github.com/aka-phrankie/GlazeWM_AutoTile.git $tmpClone 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "git clone exited $LASTEXITCODE" }
-
-        Copy-Item -Path (Join-Path $tmpClone '*') -Destination $autotileDir -Recurse -Force
-        Remove-Item -LiteralPath $tmpClone -Recurse -Force -ErrorAction SilentlyContinue
-
-        if (-not (Test-Path -LiteralPath $autotilePy)) {
-            throw "entry point '$autotileEntry' not found after clone"
-        }
-
-        Write-Info 'creating virtual environment...'
-        & python -m venv $venvDir 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "python -m venv exited $LASTEXITCODE" }
-
-        Write-Info 'installing websockets...'
-        $pip = Join-Path $venvDir 'Scripts\pip.exe'
-        & $pip install --quiet --upgrade pip 2>&1 | Out-Null
-        & $pip install --quiet websockets 2>&1 | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "pip install websockets exited $LASTEXITCODE" }
-
-        Write-Ok 'GlazeWM AutoTile installed'
-        Add-Summary 'Installed' 'GlazeWM AutoTile'
-        Register-ManifestPackage -Manager 'direct' -Id 'glaze-autotile'
+        Write-Ok 'GlazeWM AutoTiler installed'
+        Add-Summary 'Installed' 'GlazeWM AutoTiler'
+        Register-ManifestPackage -Manager 'direct' -Id 'glaze-autotiler'
     } catch {
-        Write-FailLine "GlazeWM AutoTile — $_"
-        Add-Summary 'Failed' "GlazeWM AutoTile ($_)"
+        Write-FailLine "GlazeWM AutoTiler — $_"
+        Add-Summary 'Failed' "GlazeWM AutoTiler ($_)"
     }
 }
 
@@ -877,7 +838,7 @@ function Install-Windhawk {
 
 function Install-Extras {
     Install-Thide
-    Install-GlazeAutoTile
+    Install-GlazeAutoTiler
     Install-FlowLauncher
     Install-Windhawk
 }
@@ -888,12 +849,26 @@ function Deploy-AllConfigs {
 
     Write-Section 'Deploying configurations'
 
-    # YASB
+    # YASB — the wallpaper widget needs an absolute path. YASB does not
+    # expand `~`, so the source config carries `~/Pictures/Windows-Rice`
+    # as a placeholder, and we substitute the resolved Windows Pictures
+    # folder before deploying. This handles OneDrive redirection and any
+    # other Pictures-folder relocation.
+    $yasbSrc  = Join-Path $ConfigRoot 'yasb\default_yasb_config.yaml'
+    $yasbTemp = Join-Path $env:TEMP "windows-rice-yasb-$([guid]::NewGuid().ToString('N').Substring(0,8)).yaml"
+
+    $yasbContent = Get-Content -LiteralPath $yasbSrc -Raw
+    $resolved    = $WallpaperDir -replace '\\', '/'
+    $yasbContent = $yasbContent -replace '~/Pictures/Windows-Rice', $resolved
+    Set-Content -LiteralPath $yasbTemp -Value $yasbContent -Encoding UTF8
+
     Backup-And-Deploy `
-        -Source       (Join-Path $ConfigRoot 'yasb\default_yasb_config.yaml') `
-        -Destination  (Join-Path $YasbDir   'config.yaml') `
+        -Source       $yasbTemp `
+        -Destination  (Join-Path $YasbDir 'config.yaml') `
         -Label        '~/.config/yasb/config.yaml' `
         -BackupSubdir 'yasb'
+
+    Remove-Item -LiteralPath $yasbTemp -Force -ErrorAction SilentlyContinue
 
     Backup-And-Deploy `
         -Source       (Join-Path $ConfigRoot 'yasb\styles.css') `
@@ -1502,7 +1477,7 @@ function Write-FinalSummary {
     Write-Host '  Next steps' -ForegroundColor Cyan
     Write-Host '    1. Close and reopen your terminal so PATH and font changes are loaded.' -ForegroundColor Gray
     Write-Host '    2. Start (or restart) GlazeWM.' -ForegroundColor Gray
-    Write-Host '    3. YASB and GlazeWM AutoTile launch automatically through GlazeWM.' -ForegroundColor Gray
+    Write-Host '    3. YASB and GlazeWM AutoTiler launch automatically through GlazeWM.' -ForegroundColor Gray
     Write-Host '    4. Thide hides the taskbar on next login.' -ForegroundColor Gray
     Write-Host '    5. If Windows Terminal was already running, restart it.' -ForegroundColor Gray
     Write-Host '    6. Log out or restart Windows only if something still does not refresh.' -ForegroundColor Gray
@@ -1558,13 +1533,13 @@ if (-not $SkipFonts) {
     Add-Summary 'Skipped' 'JetBrainsMono Nerd Font (package installation disabled)'
 }
 
-# 3. Extras (Thide, AutoTile, Flow Launcher, Windhawk) ---------------------
+# 3. Extras (Thide, AutoTiler, Flow Launcher, Windhawk) --------------------
 if (-not $SkipPackages) {
     Install-Extras
 } else {
     Write-Section 'Extras'
-    Write-Skip 'Skipping Thide, AutoTile, Flow Launcher, Windhawk (-SkipPackages)'
-    Add-Summary 'Skipped' 'Extras (Thide, AutoTile, Flow Launcher, Windhawk)'
+    Write-Skip 'Skipping Thide, AutoTiler, Flow Launcher, Windhawk (-SkipPackages)'
+    Add-Summary 'Skipped' 'Extras (Thide, AutoTiler, Flow Launcher, Windhawk)'
 }
 
 # 4. Configs ----------------------------------------------------------------

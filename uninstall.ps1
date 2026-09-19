@@ -13,14 +13,15 @@
     already present before the rice installer ran are NOT removed.
 
     Three categories of package are tracked:
-    - winget   — installed via winget (PowerShell 7, Windows Terminal, etc.)
+    - winget   — installed via winget (GlazeWM, YASB, Cava, and the CLI tools)
     - scoop    — installed via scoop  (Fastfetch, Nerd Font, Flow Launcher)
     - direct   — installed by the rice itself from a pinned source
-                 (Thide from GitHub releases, GlazeWM AutoTile from git)
+                 (Thide and GlazeWM AutoTiler, both from GitHub releases)
 
-    General-purpose tools (PowerShell 7, Windows Terminal) are never removed,
-    even if the manifest records them. Removing PowerShell 7 breaks Windows
-    Terminal, which is configured to launch it as the default profile.
+    PowerShell 7 and Windows Terminal are never removed, even if the manifest
+    records them. Removing PowerShell 7 breaks Windows Terminal, which is
+    configured to launch it as the default profile. Remove those two manually
+    with `winget uninstall` if you want them gone.
 
     Windows Terminal's settings.json is restored from its backup. If no backup
     exists, the file is left untouched.
@@ -75,11 +76,16 @@ $GlazeWmConfigPath   = Join-Path $HomeDir '.glzr\glazewm\config.yaml'
 $CavaConfigPath      = Join-Path $HomeDir '.config\cava\config'
 $FastfetchConfigPath = Join-Path $HomeDir '.config\fastfetch\config.jsonc'
 $FastfetchAsciiPath  = Join-Path $HomeDir '.config\fastfetch\ascii.txt'
-$WallpaperDir        = Join-Path $HomeDir 'Pictures\Windows-Rice'
+
+# Pictures folder resolution must match install.ps1 exactly, so that on a
+# Microsoft-account machine (OneDrive redirection) the uninstaller looks in
+# the same place the installer wrote to.
+$PicturesDir         = [Environment]::GetFolderPath('MyPictures')
+$WallpaperDir        = Join-Path $PicturesDir 'Windows-Rice'
 
 # Direct install locations (must match install.ps1).
 $ThideDir      = Join-Path $HomeDir '.local\bin\thide'
-$AutoTileDir   = Join-Path $HomeDir '.local\share\glaze-autotile'
+$AutoTilerDir  = Join-Path $HomeDir '.local\bin\glaze-autotiler'
 
 $BackupRoot = Join-Path $HomeDir '.windows-rice-backup'
 $ManifestPath = Join-Path $BackupRoot 'manifest.json'
@@ -426,7 +432,7 @@ function Uninstall-ScoopPackage {
 function Uninstall-DirectPackage {
     <#
         Removes packages the rice installed from pinned sources (Thide,
-        GlazeWM AutoTile). Each entry in the manifest's `installed.direct`
+        GlazeWM AutoTiler). Each entry in the manifest's `installed.direct`
         array has its own cleanup routine because the shape of "uninstall"
         depends on how the thing was installed.
 
@@ -440,8 +446,6 @@ function Uninstall-DirectPackage {
 
     switch ($Id) {
         'thide' {
-            # Stop the process, disable autostart, remove the folder,
-            # drop the PATH entry.
             if ($DryRun) {
                 Write-Skip 'would remove Thide'
                 Add-Summary 'Uninstalled' 'Thide (dry run)'
@@ -468,7 +472,6 @@ function Uninstall-DirectPackage {
                 }
             }
 
-            # Drop the PATH entry that Install-Thide added.
             $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
             if ($userPath -like "*$ThideDir*") {
                 $parts = @($userPath -split ';' |
@@ -480,31 +483,38 @@ function Uninstall-DirectPackage {
             Write-Ok 'removed: Thide'
             Add-Summary 'Uninstalled' 'Thide'
         }
-        'glaze-autotile' {
+        'glaze-autotiler' {
             if ($DryRun) {
-                Write-Skip 'would remove GlazeWM AutoTile'
-                Add-Summary 'Uninstalled' 'GlazeWM AutoTile (dry run)'
+                Write-Skip 'would remove GlazeWM AutoTiler'
+                Add-Summary 'Uninstalled' 'GlazeWM AutoTiler (dry run)'
                 return
             }
 
-            # AutoTile runs as a child of GlazeWM. If GlazeWM is running,
-            # killing pythonw here would kill the AutoTile process; the
-            # parent GlazeWM will relaunch it on next start unless the
-            # config is also reverted. Config restore is handled by
-            # Restore-AllConfigs earlier in the script.
-            if (Test-Path -LiteralPath $AutoTileDir) {
+            # Kill any running tray instance so the exe isn't locked when
+            # we try to remove the folder.
+            Get-Process -Name 'glaze-autotiler' -ErrorAction SilentlyContinue |
+                Stop-Process -Force -ErrorAction SilentlyContinue
+
+            if (Test-Path -LiteralPath $AutoTilerDir) {
                 try {
-                    Remove-Item -LiteralPath $AutoTileDir -Recurse -Force -ErrorAction Stop
-                    Write-Ok 'removed: GlazeWM AutoTile'
-                    Add-Summary 'Uninstalled' 'GlazeWM AutoTile'
+                    Remove-Item -LiteralPath $AutoTilerDir -Recurse -Force -ErrorAction Stop
                 } catch {
-                    Write-FailLine "GlazeWM AutoTile — could not remove $AutoTileDir — $_"
-                    Add-Summary 'Failed' "GlazeWM AutoTile ($_)"
+                    Write-FailLine "GlazeWM AutoTiler — could not remove $AutoTilerDir — $_"
+                    Add-Summary 'Failed' "GlazeWM AutoTiler ($_)"
+                    return
                 }
-            } else {
-                Write-Skip 'GlazeWM AutoTile was not installed'
-                Add-Summary 'Skipped' 'GlazeWM AutoTile (not installed)'
             }
+
+            $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+            if ($userPath -like "*$AutoTilerDir*") {
+                $parts = @($userPath -split ';' |
+                            Where-Object { $_ -ne '' -and $_ -ine $AutoTilerDir })
+                [Environment]::SetEnvironmentVariable('Path', ($parts -join ';'), 'User')
+                Write-Info "Removed $AutoTilerDir from user PATH"
+            }
+
+            Write-Ok 'removed: GlazeWM AutoTiler'
+            Add-Summary 'Uninstalled' 'GlazeWM AutoTiler'
         }
         default {
             Write-WarnLine "No uninstall handler for direct package '$Id' — skipping"
@@ -578,11 +588,9 @@ function Restore-Wallpapers {
     }
 
     foreach ($b in $backups) {
-        # Strip the .backup-<timestamp> suffix to recover the original name.
         $origName = $b.Name -replace '\.backup-\d{4}-\d{2}-\d{2}-\d{6}$', ''
         if (-not $origName) { continue }
 
-        # Mirror the backup's relative subdir onto the wallpaper destination.
         $relDir = $b.DirectoryName.Substring($backupDir.Length).TrimStart('\', '/')
         $destDir = if ($relDir) { Join-Path $WallpaperDir $relDir } else { $WallpaperDir }
         $destPath = Join-Path $destDir $origName
@@ -675,9 +683,9 @@ function Uninstall-AllPackages {
     #
     # Some packages are never removed, even if the manifest records that the
     # installer put them there. These are general-purpose tools users are
-    # likely to keep. Removing Microsoft.PowerShell in particular leaves
-    # Windows Terminal without its default profile (pwsh.exe), which breaks
-    # every attempt to open a terminal until PowerShell is reinstalled.
+    # likely to keep, and removing PowerShell 7 in particular leaves Windows
+    # Terminal without its default profile (pwsh.exe), which breaks every
+    # attempt to open a terminal until PowerShell is reinstalled.
     #
     # To force-remove one of these, do it manually:
     #   winget uninstall --id <Id> --exact
@@ -716,7 +724,7 @@ function Uninstall-AllPackages {
         }
     }
 
-    # -------- direct (Thide, AutoTile) ------------------------------------
+    # -------- direct (Thide, AutoTiler) -----------------------------------
     $directIds = @($manifest.direct)
     if ($directIds.Count -eq 0) {
         Write-Host ''
@@ -759,6 +767,41 @@ function Remove-BackupDirectory {
     } catch {
         Write-FailLine "Could not remove $BackupRoot — $_"
         Add-Summary 'Failed' "$BackupRoot ($_)"
+    }
+}
+
+function Remove-WallpaperFiles {
+    <#
+        Only runs when -Purge is set. Wipes the deployed wallpaper set
+        entirely, including files that were deployed fresh (and therefore
+        have no backup to restore from). Without -Purge, wallpaper files
+        that replaced nothing on disk are left in place, matching the
+        behaviour for freshly-deployed config files.
+
+        Wired into the summary so the outcome is visible.
+    #>
+    if (-not $Purge) { return }
+
+    Write-Section 'Wallpaper files'
+
+    if (-not (Test-Path -LiteralPath $WallpaperDir)) {
+        Write-Skip 'Wallpaper directory does not exist'
+        return
+    }
+
+    if ($DryRun) {
+        Write-Skip "would remove $WallpaperDir"
+        Add-Summary 'Removed' "$WallpaperDir (dry run)"
+        return
+    }
+
+    try {
+        Remove-Item -LiteralPath $WallpaperDir -Recurse -Force -ErrorAction Stop
+        Write-Ok "removed: $WallpaperDir"
+        Add-Summary 'Removed' $WallpaperDir
+    } catch {
+        Write-WarnLine "Could not remove $WallpaperDir — $_"
+        Add-Summary 'Warnings' "$WallpaperDir ($_)"
     }
 }
 
@@ -840,7 +883,10 @@ if (Test-Path -LiteralPath $BackupRoot) {
 # 2. Wallpaper directory cleanup --------------------------------------------
 Remove-WallpaperDirectory
 
-# 3. Package removal (opt-in, manifest-driven) ------------------------------
+# 3. Wallpaper files nuke (only with -Purge) --------------------------------
+Remove-WallpaperFiles
+
+# 4. Package removal (opt-in, manifest-driven) ------------------------------
 if ($RemovePackages) {
     Uninstall-AllPackages
 } else {
@@ -849,7 +895,7 @@ if ($RemovePackages) {
     Add-Summary 'Skipped' 'All packages (remove not requested)'
 }
 
-# 4. Purge backups (opt-in) -------------------------------------------------
+# 5. Purge backups (opt-in) -------------------------------------------------
 if ($Purge) {
     Remove-BackupDirectory
 } else {
@@ -857,5 +903,5 @@ if ($Purge) {
     Write-Skip 'Backups and manifest preserved (pass -Purge to delete)'
 }
 
-# 5. Summary ----------------------------------------------------------------
+# 6. Summary ----------------------------------------------------------------
 Write-FinalSummary
