@@ -146,6 +146,10 @@ widgets:
     type: "yasb.wallpapers.WallpapersWidget"
     options:
       label: "<span>\udb80\udd1b</span>"
+      # The installer substitutes the path below with the fully-resolved
+      # Windows Pictures folder before deploying. YASB does not expand `~`,
+      # so the deployed file will contain an absolute path like
+      # "C:/Users/you/Pictures/Windows-Rice".
       image_path:
         - "~/Pictures/Windows-Rice"
       change_automatically: false # Automatically change wallpaper
