@@ -1,0 +1,15 @@
+[colors]
+enabled = true
+hours   = "#F2F2F2"   # primary   → white5
+minutes = "#C8C8C8"   # secondary → white2
+seconds = "#989898"   # blue      → gray6 (semantic, luminance-only)
+separator = "#303030" # border    → black5
+date = "#E8E8E8"      # text      → white4
+day = "#FFFFFF"       # accent    → white7 (the one pure white)
+ampm = "#A8A8A8"      # text_muted → gray8
+timezone = "#A8A8A8"  # text_muted → gray8
+border = "#303030"    # border    → black5
+title = "#C8C8C8"     # secondary → white2
+background = "#0E0E0E" # background → black1
+late_night_hours = "#707070" # text_subtle → gray2
+hour_palette = []

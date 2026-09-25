@@ -1,0 +1,15 @@
+[colors]
+enabled = true
+hours   = "#7E9CD8"   # primary   → crystalBlue
+minutes = "#6A9589"   # secondary → waveAqua1
+seconds = "#957FB8"   # purple    → oniViolet
+separator = "#54546D" # border    → sumiInk6
+date = "#DCD7BA"      # text      → fujiWhite
+day = "#DCA561"       # accent    → autumnYellow
+ampm = "#938AA9"      # text_muted → springViolet1
+timezone = "#938AA9"  # text_muted → springViolet1
+border = "#54546D"    # border    → sumiInk6
+title = "#DCA561"     # accent    → autumnYellow
+background = "#1F1F28" # background → sumiInk3
+late_night_hours = "#727169" # text_subtle → fujiGray
+hour_palette = []

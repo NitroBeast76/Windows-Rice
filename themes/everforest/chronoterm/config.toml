@@ -1,0 +1,15 @@
+[colors]
+enabled = true
+hours   = "#A7C080"   # primary   → native green
+minutes = "#7FBBB3"   # secondary → native blue
+seconds = "#83C092"   # cyan      → native aqua
+separator = "#4F585E" # border
+date = "#D3C6AA"      # text      → native fg
+day = "#E69875"       # accent    → native orange
+ampm = "#9DA9A0"      # text_muted
+timezone = "#9DA9A0"  # text_muted
+border = "#4F585E"    # border
+title = "#E69875"     # accent    → native orange
+background = "#2D353B" # background (v2.1)
+late_night_hours = "#859289" # text_subtle (v2.1)
+hour_palette = []
