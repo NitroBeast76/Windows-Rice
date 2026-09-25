@@ -19,10 +19,36 @@
     Windows Terminal's settings.json is merged (not overwritten) so unrelated
     profiles / schemes / keybindings survive.
 
+    THEMES
+    ------
+    'mocha' is a reserved name. It refers to the base config set in configs\
+    — there is no themes\mocha\ folder. Passing -Theme mocha is equivalent to
+    passing no theme at all: both use the base configs.
+
+    Every other theme lives under themes\<name>\, mirroring the layout of
+    configs\. Files present in the theme folder override the corresponding
+    base file; files absent fall through to configs\. Theme folders may
+    include their own wallpapers\ subfolder, which replaces the base
+    wallpaper set entirely.
+
+    Adding a new theme requires no installer changes: drop a folder under
+    themes\ and pass -Theme <name>.
+
+    To swap themes quickly without touching packages:
+        .\install.ps1 -Theme kanagawa -SkipPackages -SkipFonts
+
+    The active theme is recorded in the manifest, so a plain .\install.ps1
+    afterward keeps using the last chosen theme.
+
+    UPDATES
+    -------
+    -Update pulls the latest commit from the repository's origin using git
+    --ff-only (no merge commits). Combine with -SkipPackages -SkipFonts for a
+    fast "get the latest configs and redeploy" pass.
+
 .PARAMETER SkipPackages
     Skip ALL package installation: winget, scoop, the Nerd Font, PSReadLine,
-    and the extras (Thide, GlazeWM AutoTiler, Flow Launcher, Windhawk). Only
-    configuration files are deployed.
+    and the extras. Only configuration files are deployed.
 
 .PARAMETER SkipFonts
     Do not install the JetBrainsMono Nerd Font. Implied by -SkipPackages.
@@ -36,6 +62,14 @@
 .PARAMETER Yes
     Assume "yes" for confirmation prompts (non-interactive install).
 
+.PARAMETER Theme
+    Theme name. 'mocha' (the default) refers to the base configs. Any other
+    value must match a folder under themes\. If omitted, the last theme
+    recorded in the manifest is used, or 'mocha' on a fresh install.
+
+.PARAMETER Update
+    Run `git pull --ff-only` in the repository before continuing.
+
 .NOTES
     Repository:  Windows-Rice
     Requires:    PowerShell 5.1+ (Windows 10 / 11)
@@ -48,7 +82,9 @@ param(
     [switch]$SkipFonts,
     [switch]$SkipTerminal,
     [switch]$DryRun,
-    [switch]$Yes
+    [switch]$Yes,
+    [string]$Theme,
+    [switch]$Update
 )
 
 #Requires -Version 5.1
@@ -64,10 +100,12 @@ try {
 
 $RepoRoot   = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 $ConfigRoot = Join-Path $RepoRoot 'configs'
+$ThemeRoot  = Join-Path $RepoRoot 'themes'
 $AssetRoot  = Join-Path $RepoRoot 'assets'
 
 $HomeDir        = $env:USERPROFILE
 $DocumentsDir   = [Environment]::GetFolderPath('MyDocuments')
+$AppDataDir     = [Environment]::GetFolderPath('ApplicationData')
 $PwshProfileDir = Join-Path $DocumentsDir 'PowerShell'
 $PwshProfilePath= Join-Path $PwshProfileDir 'Microsoft.PowerShell_profile.ps1'
 
@@ -75,6 +113,12 @@ $YasbDir       = Join-Path $HomeDir '.config\yasb'
 $GlazeWmDir    = Join-Path $HomeDir '.glzr\glazewm'
 $CavaDir       = Join-Path $HomeDir '.config\cava'
 $FastfetchDir  = Join-Path $HomeDir '.config\fastfetch'
+$BtopDir       = Join-Path $HomeDir '.config\btop'
+
+# ChronoTerm reads %APPDATA%\chronoterm\config.toml on first run. We resolve
+# %APPDATA% through the Windows API rather than $env:APPDATA so it stays
+# correct on machines where the shell environment is unusual.
+$ChronoTermDir = Join-Path $AppDataDir 'chronoterm'
 
 # Resolve the effective Pictures folder via the Windows API so this works
 # on both local accounts and Microsoft accounts with OneDrive redirection.
@@ -91,15 +135,37 @@ $SkipPSReadLineInstall = [bool]$SkipPackages
 # In-memory manifest state (see Register-ManifestPackage / Save-Manifest).
 $script:Manifest      = $null
 
-# ================================================================== LOGGING
+# Cached output of `winget list`, populated on first use. Cuts ~15 redundant
+# winget invocations from a typical run.
+$script:WingetListCache = $null
 
-$script:Sep = '─' * 60
+# ================================================================== LOGGING
+#
+# Presentation layer only. Every function here keeps its original name and
+# parameter contract (a single positional/[string] message, or the same
+# named params as before) so none of the ~60 call sites elsewhere in the
+# script need to change. Only what gets printed and how it's colored has
+# been redesigned.
+
+$script:BoxWidth    = 56                   # interior width of boxed section headers
+$script:BannerWidth = 58                   # width of the WINDOWS block art, verified via figlet
+$script:Sep         = '─' * ($script:BoxWidth + 4)
 
 function Write-Separator {
-    Write-Host $script:Sep -ForegroundColor Cyan
+    Write-Host $script:Sep -ForegroundColor DarkCyan
 }
 
 function Write-Banner {
+    <#
+        The block art spells WINDOWS only (figlet, ansi_shadow font — every
+        line verified at exactly 58 columns). "-RICE" is intentionally not
+        forced into the same block font: fitting the full hyphenated name
+        into ansi_shadow runs to 75+ columns and wraps badly on an 80-column
+        terminal. Instead it appears as a right-aligned accent line directly
+        under the art, echoing the app's Cyan (used for section headers
+        elsewhere) so the banner reads as one connected wordmark rather than
+        an isolated Magenta block.
+    #>
     param([string]$Subtitle = '')
     Write-Host ''
     Write-Host '██╗    ██╗██╗███╗   ██╗██████╗  ██████╗ ██╗    ██╗███████╗' -ForegroundColor Magenta
@@ -107,41 +173,81 @@ function Write-Banner {
     Write-Host '██║ █╗ ██║██║██╔██╗ ██║██║  ██║██║   ██║██║ █╗ ██║███████╗' -ForegroundColor Magenta
     Write-Host '██║███╗██║██║██║╚██╗██║██║  ██║██║   ██║██║███╗██║╚════██║' -ForegroundColor Magenta
     Write-Host '╚███╔███╔╝██║██║ ╚████║██████╔╝╚██████╔╝╚███╔███╔╝███████║' -ForegroundColor Magenta
-    Write-Host ' ╚══╝╚══╝ ╚═╝╚═╝  ╚════╝╚═════╝  ╚═════╝  ╚══╝╚══╝ ╚══════╝' -ForegroundColor Magenta
+    Write-Host ' ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝╚═════╝  ╚═════╝  ╚══╝╚══╝ ╚══════╝' -ForegroundColor Magenta
+    Write-Host '                                              ──── R I C E' -ForegroundColor Cyan
     Write-Host ''
-    Write-Host '                    WINDOWS-RICE' -ForegroundColor Magenta
     if ($Subtitle) {
-        Write-Host "              $Subtitle" -ForegroundColor DarkGray
+        Write-Host "  $Subtitle" -ForegroundColor DarkGray
     }
+    Write-Host ('─' * $script:BannerWidth) -ForegroundColor DarkMagenta
     Write-Host ''
 }
 
 function Write-Section {
+    <#
+        Renders the section title inside a light box instead of the plain
+        rule-title-rule it used to be. Still takes exactly one positional
+        string, so every existing `Write-Section 'Foo'` call is untouched.
+    #>
     param([string]$Title)
+
+    $label = " $($Title.ToUpper()) "
+    $pad   = $script:BoxWidth - $label.Length
+    if ($pad -lt 0) { $pad = 0 }
+
     Write-Host ''
-    Write-Separator
-    Write-Host "  $($Title.ToUpper())" -ForegroundColor Cyan
-    Write-Separator
+    Write-Host ('  ╭' + ('─' * $script:BoxWidth) + '╮') -ForegroundColor DarkCyan
+    Write-Host '  │' -NoNewline -ForegroundColor DarkCyan
+    Write-Host ($label + (' ' * $pad)) -NoNewline -ForegroundColor Cyan
+    Write-Host '│' -ForegroundColor DarkCyan
+    Write-Host ('  ╰' + ('─' * $script:BoxWidth) + '╯') -ForegroundColor DarkCyan
     Write-Host ''
 }
 
 function Write-EnvBlock {
+    param([string]$ActiveTheme = '')
+
+    $rows = @(
+        @{ Label = 'Home';       Value = $HomeDir }
+        @{ Label = 'Repository'; Value = $RepoRoot }
+    )
+    if ($ActiveTheme) { $rows += @{ Label = 'Theme'; Value = $ActiveTheme } }
+    $rows += @{ Label = 'Dry Run'; Value = $(if ($DryRun) { 'YES — no changes will be made' } else { 'No' }) }
+
     Write-Host '  Environment' -ForegroundColor Cyan
-    Write-Host ('    ' + 'Home'.PadRight(11) + $HomeDir) -ForegroundColor Gray
-    Write-Host ('    ' + 'Repository'.PadRight(11) + $RepoRoot) -ForegroundColor Gray
-    if ($DryRun) {
-        Write-Host ('    ' + 'Dry Run'.PadRight(11) + 'YES — no changes will be made') -ForegroundColor Yellow
-    } else {
-        Write-Host ('    ' + 'Dry Run'.PadRight(11) + 'No') -ForegroundColor Gray
+    foreach ($r in $rows) {
+        $valueColor = if ($r.Label -eq 'Dry Run' -and $DryRun) { 'Yellow' } else { 'Gray' }
+        Write-Host ('    ┃ ' + $r.Label.PadRight(11)) -NoNewline -ForegroundColor DarkGray
+        Write-Host $r.Value -ForegroundColor $valueColor
     }
     Write-Host ''
 }
 
-function Write-Ok       { param([string]$m) Write-Host ('  ' + '[OK]'.PadRight(6) + ' ' + $m) -ForegroundColor Green }
-function Write-Skip     { param([string]$m) Write-Host ('  ' + '[SKIP]'.PadRight(6) + ' ' + $m) -ForegroundColor DarkGray }
-function Write-WarnLine { param([string]$m) Write-Host ('  ' + '[WARN]'.PadRight(6) + ' ' + $m) -ForegroundColor Yellow }
-function Write-FailLine { param([string]$m) Write-Host ('  ' + '[FAIL]'.PadRight(6) + ' ' + $m) -ForegroundColor Red }
-function Write-Info     { param([string]$m) Write-Host ('  ' + '[INFO]'.PadRight(6) + ' ' + $m) -ForegroundColor Gray }
+function Write-Ok {
+    param([string]$m)
+    Write-Host '  ✓ ' -NoNewline -ForegroundColor Green
+    Write-Host $m -ForegroundColor Gray
+}
+function Write-Skip {
+    param([string]$m)
+    Write-Host '  · ' -NoNewline -ForegroundColor DarkGray
+    Write-Host $m -ForegroundColor DarkGray
+}
+function Write-WarnLine {
+    param([string]$m)
+    Write-Host '  ▲ ' -NoNewline -ForegroundColor Yellow
+    Write-Host $m -ForegroundColor Yellow
+}
+function Write-FailLine {
+    param([string]$m)
+    Write-Host '  ✗ ' -NoNewline -ForegroundColor Red
+    Write-Host $m -ForegroundColor Red
+}
+function Write-Info {
+    param([string]$m)
+    Write-Host '  › ' -NoNewline -ForegroundColor DarkCyan
+    Write-Host $m -ForegroundColor Gray
+}
 
 # ================================================================== SUMMARY
 
@@ -165,6 +271,22 @@ function Add-Summary {
 }
 
 # ================================================================== HELPERS
+
+function Write-Utf8NoBom {
+    <#
+        Write text to a file as UTF-8 without a BOM. Under PowerShell 5.1,
+        `Set-Content -Encoding UTF8` emits a BOM; that breaks tools which
+        treat the leading bytes as content (some YAML parsers, winget config
+        readers). Use this instead for any file where the BOM would be
+        unwanted.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Content
+    )
+    $enc = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($Path, $Content, $enc)
+}
 
 function Update-PathFromRegistry {
     <#
@@ -290,6 +412,49 @@ function Backup-And-Deploy {
     }
 }
 
+# ===================================================== THEME RESOLUTION
+
+function Resolve-ThemeFile {
+    <#
+        Return the path to deploy from for a given config file. Prefers the
+        theme-specific override at themes\<theme>\<relpath>; falls back to
+        the base file at configs\<relpath>.
+
+        If $ThemeName is empty (mocha / base theme), returns the base path.
+    #>
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$ThemeName,
+        [Parameter(Mandatory)][string]$RelPath
+    )
+
+    if ($ThemeName) {
+        $themeFile = Join-Path (Join-Path $ThemeRoot $ThemeName) $RelPath
+        if (Test-Path -LiteralPath $themeFile) {
+            return $themeFile
+        }
+    }
+    return (Join-Path $ConfigRoot $RelPath)
+}
+
+function Get-ThemeMarker {
+    <#
+        Return a short suffix for display, indicating whether a file came
+        from the active theme or fell through to the base config.
+    #>
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$ThemeName,
+        [Parameter(Mandatory)][string]$RelPath
+    )
+
+    if ($ThemeName) {
+        $themeFile = Join-Path (Join-Path $ThemeRoot $ThemeName) $RelPath
+        if (Test-Path -LiteralPath $themeFile) {
+            return " [$ThemeName]"
+        }
+    }
+    return ''
+}
+
 # ======================================================== INSTALL MANIFEST
 
 function Get-Manifest {
@@ -392,14 +557,29 @@ function Test-WingetAvailable {
     return (Test-CommandExists 'winget')
 }
 
+function Get-WingetList {
+    <#
+        Return the raw output of `winget list` for the current user. Cached
+        for the duration of the run so per-package checks don't re-invoke
+        winget each time. The cache is populated once, on first use.
+    #>
+    if ($null -ne $script:WingetListCache) {
+        return $script:WingetListCache
+    }
+
+    try {
+        $script:WingetListCache = (& winget list --accept-source-agreements 2>&1 | Out-String)
+    } catch {
+        $script:WingetListCache = ''
+    }
+    return $script:WingetListCache
+}
+
 function Test-WingetPackageInstalled {
     param([string]$Id)
-    try {
-        $out = (& winget list --id $Id --exact --accept-source-agreements 2>&1 | Out-String)
-    } catch {
-        return $false
-    }
-    return ($out -match [regex]::Escape($Id))
+    $list = Get-WingetList
+    if ([string]::IsNullOrWhiteSpace($list)) { return $false }
+    return ($list -match [regex]::Escape($Id))
 }
 
 function Install-WingetPackage {
@@ -422,7 +602,8 @@ function Install-WingetPackage {
 
     Write-Info "installing $Name ($Id)..."
     try {
-        $out = (& winget install --id $Id --exact --silent `
+        $out = (& winget install --id $Id --exact `
+                    --disable-interactivity `
                     --accept-package-agreements --accept-source-agreements 2>&1 |
                 Out-String)
     } catch {
@@ -431,20 +612,19 @@ function Install-WingetPackage {
         return $false
     }
 
+    # Exit code 0 = success. We already verified the package was absent at
+    # the top of this function, so a clean exit here means a real install.
     if ($LASTEXITCODE -eq 0) {
-        if ($out -match 'already installed') {
-            Write-Skip "$Name already installed"
-            Add-Summary 'AlreadyInstalled' $Name
-        } else {
-            Write-Ok $Name
-            Add-Summary 'Installed' $Name
-            Register-ManifestPackage -Manager 'winget' -Id $Id
-        }
+        Write-Ok $Name
+        Add-Summary 'Installed' $Name
+        Register-ManifestPackage -Manager 'winget' -Id $Id
         return $true
     }
 
-    # 0x8A150061 (-1978335135) = winget "no applicable upgrade".
-    if ($out -match 'already installed' -or $LASTEXITCODE -eq -1978335135) {
+    # 0x8A150061 (-1978335135) = APPINSTALLER_CLI_ERROR_PACKAGE_ALREADY_INSTALLED.
+    # The initial check missed it (rare race, or the user installed it between
+    # the check and now), so don't register it in the manifest.
+    if ($LASTEXITCODE -eq -1978335135) {
         Write-Skip "$Name already installed"
         Add-Summary 'AlreadyInstalled' $Name
         return $true
@@ -477,6 +657,9 @@ function Ensure-Scoop {
 
     try {
         Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force -ErrorAction Stop
+        # This is the upstream-supported bootstrap. It downloads and runs the
+        # Scoop installer in-process. No checksum is available; the trust
+        # decision is implicit in installing Scoop at all.
         Invoke-RestMethod -Uri 'https://get.scoop.sh' | Invoke-Expression
     } catch {
         Write-FailLine "Scoop installation failed: $_"
@@ -505,18 +688,9 @@ function Add-ScoopBucket {
         return
     }
 
-    # Check whether the bucket already exists. This avoids relying on
-    # parsing scoop's stderr, which PowerShell 5.1 doesn't capture reliably.
-    try {
-        $existing = (& scoop bucket list 2>&1 | Out-String)
-        if ($existing -match "(?m)^\s*$([regex]::Escape($Bucket))\s") {
-            Write-Skip "scoop bucket '$Bucket' already present"
-            return
-        }
-    } catch {
-        # Fall through to attempt the add
-    }
-
+    # Attempt the add first — scoop returns exit code 2 with a "bucket
+    # already exists" message when it's present, and 0 when it was added.
+    # Both are success for our purposes; anything else is a genuine problem.
     try {
         $out = (& scoop bucket add $Bucket 2>&1 | Out-String)
     } catch {
@@ -530,9 +704,7 @@ function Add-ScoopBucket {
         return
     }
 
-    # Belt and braces: even if $out didn't capture it, the LASTEXITCODE
-    # for "already exists" is 2 and scoop's output mentions it.
-    if ($LASTEXITCODE -eq 2) {
+    if ($LASTEXITCODE -eq 2 -or $out -match 'already') {
         Write-Skip "scoop bucket '$Bucket' already present"
         return
     }
@@ -561,6 +733,9 @@ function Install-ScoopPackage {
         return $false
     }
 
+    # scoop exits 0 whether the package was freshly installed or already
+    # present. Detect the latter from its output text; scoop's message is
+    # not localized (upstream ships English-only).
     if ($out -match 'already installed') {
         Write-Skip "$Display already installed"
         Add-Summary 'AlreadyInstalled' $Display
@@ -592,6 +767,10 @@ function Install-AllPackages {
     }
 
     if ($wingetOk) {
+        # Prime the cache with a single `winget list` call so per-package
+        # checks don't re-invoke winget fifteen times.
+        [void](Get-WingetList)
+
         # Core rice components (winget).
         Install-WingetPackage -Id 'Microsoft.PowerShell'      -Name 'PowerShell 7'
         Install-WingetPackage -Id 'Microsoft.WindowsTerminal' -Name 'Windows Terminal'
@@ -650,7 +829,6 @@ function Install-RiceFont {
         return
     }
 
-    # Canonical: JetBrainsMono Nerd Font Mono. Fallback: non-Mono variant.
     $primary  = 'JetBrainsMono-NF-Mono'
     $fallback = 'JetBrainsMono-NF'
 
@@ -694,18 +872,14 @@ function Install-RiceFont {
     Add-Summary 'Failed' 'JetBrainsMono Nerd Font'
 }
 
-# ======================================================== EXTRAS (1.1)
+# ======================================================== EXTRAS
 
 function Install-Thide {
     <#
-        Thide — taskbar hide/show. Not on winget or scoop. Downloads the
-        pinned portable ZIP from GitHub releases and extracts to
-        ~/.local/bin/thide/. Enables autostart so the taskbar stays hidden
-        across logins.
-
-        To update: change $version below to match the release tag on
-        https://github.com/amnweb/thide/releases, and adjust the asset
-        filename if the naming convention changes.
+        Thide — taskbar hide/show. Portable ZIP from GitHub releases.
+        Pinned to a specific version. To update, change $version below to
+        match the release tag on https://github.com/amnweb/thide/releases
+        and adjust the asset filename if the naming convention changes.
     #>
     $thideDir = Join-Path $HomeDir '.local\bin\thide'
     $thideExe = Join-Path $thideDir 'thide.exe'
@@ -743,8 +917,15 @@ function Install-Thide {
         }
 
         # Register autostart so the taskbar stays hidden across reboots.
+        # If this fails the taskbar will come back on next login — loud
+        # warning rather than silent success.
         if (Test-Path -LiteralPath $thideExe) {
-            & $thideExe enable-autostart 2>&1 | Out-Null
+            $autostartOut = (& $thideExe enable-autostart 2>&1 | Out-String)
+            if ($LASTEXITCODE -ne 0) {
+                Write-WarnLine "Thide autostart setup exited $LASTEXITCODE — taskbar may reappear on next login."
+                Write-WarnLine "Run '$thideExe enable-autostart' manually to retry."
+                Add-Summary 'Warnings' 'Thide (autostart setup failed)'
+            }
         }
 
         Write-Ok 'Thide installed'
@@ -758,20 +939,9 @@ function Install-Thide {
 
 function Install-GlazeAutoTiler {
     <#
-        GlazeWM AutoTiler — a tray application that provides Master-Stack and
-        Dwindle layouts for GlazeWM. Distributed as a pre-built .exe, so no
-        Python, git, or venv are required.
-
-        The no-console build is used for daily use. A console build exists for
-        debugging; it is not installed by default.
-
-        To update: change $version below to match the release tag on
-        https://github.com/orbi-tal/glaze-autotiler/releases, and adjust the
-        asset filename if the naming convention changes.
-
-        Config and layout scripts live under
-        %USERPROFILE%\.config\glaze-autotiler\ and are created automatically
-        on the first run. That folder is not managed by this installer.
+        GlazeWM AutoTiler — tray application. Pre-built .exe from GitHub
+        releases. Config lives at ~/.config/glaze-autotiler/ and is created
+        by the app on first run.
     #>
     $autotilerDir = Join-Path $HomeDir '.local\bin\glaze-autotiler'
     $autotilerExe = Join-Path $autotilerDir 'glaze-autotiler.exe'
@@ -798,7 +968,6 @@ function Install-GlazeAutoTiler {
         New-Item -ItemType Directory -Path $autotilerDir -Force | Out-Null
         Invoke-WebRequest -Uri $url -OutFile $autotilerExe -UseBasicParsing -ErrorAction Stop
 
-        # Add the folder to the user PATH (idempotent).
         $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
         if ($userPath -notlike "*$autotilerDir*") {
             [Environment]::SetEnvironmentVariable('Path', "$userPath;$autotilerDir", 'User')
@@ -814,6 +983,53 @@ function Install-GlazeAutoTiler {
     }
 }
 
+function Install-ChronoTerm {
+    <#
+        ChronoTerm — terminal clock / countdown. Pre-build .exe from GitHub
+        releases. Writes its own config to %APPDATA%\chronoterm\config.toml
+        on first run; our configs override that file with the theme-aware
+        version deployed by Deploy-AllConfigs.
+    #>
+    $dir     = Join-Path $HomeDir '.local\bin\chronoterm'
+    $exe     = Join-Path $dir 'chronoterm.exe'
+    $version = '1.0.2'
+
+    Write-Section 'ChronoTerm'
+
+    if (Test-Path -LiteralPath $exe) {
+        Write-Skip 'ChronoTerm already installed'
+        Add-Summary 'AlreadyInstalled' 'ChronoTerm'
+        return
+    }
+
+    if ($DryRun) {
+        Write-Skip "would download ChronoTerm v$version and add to PATH"
+        Add-Summary 'Installed' 'ChronoTerm (dry run)'
+        return
+    }
+
+    $url = "https://github.com/cumulus13/chronoterm/releases/download/v$version/chronoterm-windows-x86_64.exe"
+
+    try {
+        Write-Info "downloading ChronoTerm v$version..."
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        Invoke-WebRequest -Uri $url -OutFile $exe -UseBasicParsing -ErrorAction Stop
+
+        $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+        if ($userPath -notlike "*$dir*") {
+            [Environment]::SetEnvironmentVariable('Path', "$userPath;$dir", 'User')
+            Write-Info "Added $dir to user PATH"
+        }
+
+        Write-Ok 'ChronoTerm installed'
+        Add-Summary 'Installed' 'ChronoTerm'
+        Register-ManifestPackage -Manager 'direct' -Id 'chronoterm'
+    } catch {
+        Write-FailLine "ChronoTerm — $_"
+        Add-Summary 'Failed' "ChronoTerm ($_)"
+    }
+}
+
 function Install-FlowLauncher {
     if (-not (Test-CommandExists 'scoop')) {
         Write-Skip 'Scoop unavailable — cannot install Flow Launcher'
@@ -823,12 +1039,25 @@ function Install-FlowLauncher {
     Install-ScoopPackage -Name 'flow-launcher' -Display 'Flow Launcher'
 }
 
-function Install-Windhawk {
+function Install-RMatrix {
     <#
-        Windhawk — mod platform for Windows shell components.
-        Installs the platform only. No mods are auto-installed; see README
-        for the reasoning (mods run in-process and can crash Explorer).
+        rmatrix — Rust port of cmatrix. The original cmatrix has no pre-built
+        native Windows binary and would require MSYS2 or a compile step;
+        rmatrix is the equivalent that installs cleanly via scoop.
+
+        Note: rmatrix is not guaranteed to be in the main or extras bucket.
+        If this install fails with "couldn't find manifest", the correct
+        bucket needs to be added first.
     #>
+    if (-not (Test-CommandExists 'scoop')) {
+        Write-Skip 'Scoop unavailable — cannot install rmatrix'
+        Add-Summary 'Skipped' 'rmatrix (Scoop unavailable)'
+        return
+    }
+    Install-ScoopPackage -Name 'rmatrix' -Display 'rmatrix (cmatrix port)'
+}
+
+function Install-Windhawk {
     Install-WingetPackage -Id 'RamenSoftware.Windhawk' -Name 'Windhawk'
     if (-not $DryRun) {
         Write-Info 'Windhawk installed. No mods are installed by default.'
@@ -841,70 +1070,62 @@ function Install-Extras {
     Install-GlazeAutoTiler
     Install-FlowLauncher
     Install-Windhawk
+    Install-ChronoTerm
+    Install-RMatrix
 }
 
 # ======================================================= CONFIG DEPLOYMENT
 
 function Deploy-AllConfigs {
+    <#
+        Every configurable file this installer manages is listed in the
+        $deployMap below. Adding a new configurable file means adding one
+        entry to that map — nothing else in the installer needs to change.
+
+        Each entry:
+          Rel    — path relative to configs\ (and, if overriding, to
+                   themes\<theme>\)
+          Dest   — absolute destination path
+          Subdir — backup subfolder under $BackupRoot
+          Label  — human-readable label for logging
+          Sub    — if $true, apply the substitution table to the content
+                   before deploying (used for YASB's wallpaper path)
+
+        A file is only deployed if at least one of:
+          - themes\<theme>\<Rel> exists (theme override), OR
+          - configs\<Rel> exists (base file)
+
+        If neither exists, the file is silently skipped.
+    #>
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$ThemeName
+    )
 
     Write-Section 'Deploying configurations'
 
-    # YASB — the wallpaper widget needs an absolute path. YASB does not
-    # expand `~`, so the source config carries `~/Pictures/Windows-Rice`
-    # as a placeholder, and we substitute the resolved Windows Pictures
-    # folder before deploying. This handles OneDrive redirection and any
-    # other Pictures-folder relocation.
-    $yasbSrc  = Join-Path $ConfigRoot 'yasb\default_yasb_config.yaml'
-    $yasbTemp = Join-Path $env:TEMP "windows-rice-yasb-$([guid]::NewGuid().ToString('N').Substring(0,8)).yaml"
+    # Substitution table for text configs. YASB's wallpaper path is the only
+    # current consumer; the mechanism is generic so future configs can opt in.
+    $substitutions = @{
+        '~/Pictures/Windows-Rice' = ($WallpaperDir -replace '\\', '/')
+    }
 
-    $yasbContent = Get-Content -LiteralPath $yasbSrc -Raw
-    $resolved    = $WallpaperDir -replace '\\', '/'
-    $yasbContent = $yasbContent -replace '~/Pictures/Windows-Rice', $resolved
-    Set-Content -LiteralPath $yasbTemp -Value $yasbContent -Encoding UTF8
+    # ------------------------------------------------------------------
+    # DEPLOY MAP — add a new configurable file by adding one line here.
+    # ------------------------------------------------------------------
+    $deployMap = @(
+        @{ Rel = 'yasb\default_yasb_config.yaml';        Dest = (Join-Path $YasbDir      'config.yaml');        Subdir = 'yasb';        Label = '~/.config/yasb/config.yaml';                Sub = $true }
+        @{ Rel = 'yasb\styles.css';                      Dest = (Join-Path $YasbDir      'styles.css');         Subdir = 'yasb';        Label = '~/.config/yasb/styles.css' }
+        @{ Rel = 'glazewm\default_glazewm_config.yaml';  Dest = (Join-Path $GlazeWmDir   'config.yaml');        Subdir = 'glazewm';     Label = '~/.glzr/glazewm/config.yaml' }
+        @{ Rel = 'cava\config';                          Dest = (Join-Path $CavaDir      'config');             Subdir = 'cava';        Label = '~/.config/cava/config' }
+        @{ Rel = 'fastfetch\config.jsonc';               Dest = (Join-Path $FastfetchDir 'config.jsonc');       Subdir = 'fastfetch';   Label = '~/.config/fastfetch/config.jsonc' }
+        @{ Rel = 'fastfetch\ascii.txt';                  Dest = (Join-Path $FastfetchDir 'ascii.txt');          Subdir = 'fastfetch';   Label = '~/.config/fastfetch/ascii.txt' }
+        @{ Rel = 'powershell\Microsoft.PowerShell_profile.ps1'; Dest = $PwshProfilePath;                        Subdir = 'powershell';  Label = 'PowerShell profile' }
+        @{ Rel = 'chronoterm\config.toml';               Dest = (Join-Path $ChronoTermDir 'config.toml');       Subdir = 'chronoterm';  Label = '%APPDATA%\chronoterm\config.toml' }
+        @{ Rel = 'btop\btop.conf';                       Dest = (Join-Path $BtopDir      'btop.conf');          Subdir = 'btop';        Label = '~/.config/btop/btop.conf' }
+    )
+    # ------------------------------------------------------------------
 
-    Backup-And-Deploy `
-        -Source       $yasbTemp `
-        -Destination  (Join-Path $YasbDir 'config.yaml') `
-        -Label        '~/.config/yasb/config.yaml' `
-        -BackupSubdir 'yasb'
-
-    Remove-Item -LiteralPath $yasbTemp -Force -ErrorAction SilentlyContinue
-
-    Backup-And-Deploy `
-        -Source       (Join-Path $ConfigRoot 'yasb\styles.css') `
-        -Destination  (Join-Path $YasbDir   'styles.css') `
-        -Label        '~/.config/yasb/styles.css' `
-        -BackupSubdir 'yasb'
-
-    # GlazeWM
-    Backup-And-Deploy `
-        -Source       (Join-Path $ConfigRoot 'glazewm\default_glazewm_config.yaml') `
-        -Destination  (Join-Path $GlazeWmDir 'config.yaml') `
-        -Label        '~/.glzr/glazewm/config.yaml' `
-        -BackupSubdir 'glazewm'
-
-    # Cava — path confirmed: ~/.config/cava/config is read by karlstav.cava
-    # on Windows as well as on Linux.
-    Backup-And-Deploy `
-        -Source       (Join-Path $ConfigRoot 'cava\config') `
-        -Destination  (Join-Path $CavaDir    'config') `
-        -Label        '~/.config/cava/config' `
-        -BackupSubdir 'cava'
-
-    # Fastfetch — canonical location is ~/.config/fastfetch only.
-    Backup-And-Deploy `
-        -Source       (Join-Path $ConfigRoot 'fastfetch\config.jsonc') `
-        -Destination  (Join-Path $FastfetchDir 'config.jsonc') `
-        -Label        '~/.config/fastfetch/config.jsonc' `
-        -BackupSubdir 'fastfetch'
-
-    Backup-And-Deploy `
-        -Source       (Join-Path $ConfigRoot 'fastfetch\ascii.txt') `
-        -Destination  (Join-Path $FastfetchDir 'ascii.txt') `
-        -Label        '~/.config/fastfetch/ascii.txt' `
-        -BackupSubdir 'fastfetch'
-
-    # PowerShell profile
+    # Pre-create the PowerShell profile directory if needed.
     if (-not (Test-Path -LiteralPath $PwshProfileDir)) {
         if ($DryRun) {
             Write-Skip "would create $PwshProfileDir"
@@ -913,22 +1134,43 @@ function Deploy-AllConfigs {
         }
     }
 
-    Backup-And-Deploy `
-        -Source       (Join-Path $ConfigRoot 'powershell\Microsoft.PowerShell_profile.ps1') `
-        -Destination  $PwshProfilePath `
-        -Label        'PowerShell profile' `
-        -BackupSubdir 'powershell'
+    foreach ($entry in $deployMap) {
+        $src    = Resolve-ThemeFile -ThemeName $ThemeName -RelPath $entry.Rel
+        $marker = Get-ThemeMarker   -ThemeName $ThemeName -RelPath $entry.Rel
+
+        if (-not (Test-Path -LiteralPath $src)) {
+            Write-Skip "$($entry.Label) — no source file, skipping"
+            continue
+        }
+
+        $deploySource = $src
+        $tempCreated  = $false
+
+        if ($entry.Sub) {
+            $content = Get-Content -LiteralPath $src -Raw
+            foreach ($find in $substitutions.Keys) {
+                $content = $content -replace [regex]::Escape($find), $substitutions[$find]
+            }
+            $deploySource = Join-Path $env:TEMP "windows-rice-$([guid]::NewGuid().ToString('N').Substring(0,8))"
+            # No BOM: the deployed YASB config is read by Python's YAML
+            # loader, which can be picky about leading bytes.
+            Write-Utf8NoBom -Path $deploySource -Content $content
+            $tempCreated = $true
+        }
+
+        Backup-And-Deploy `
+            -Source       $deploySource `
+            -Destination  $entry.Dest `
+            -Label        "$($entry.Label)$marker" `
+            -BackupSubdir $entry.Subdir | Out-Null
+
+        if ($tempCreated) {
+            Remove-Item -LiteralPath $deploySource -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 function Set-DefaultWallpaper {
-    <#
-        Sets the desktop wallpaper once, on the first run. Subsequent runs
-        respect whatever the user has chosen since.
-
-        Uses SystemParametersInfo (the Win32 API) rather than RUNDLL32,
-        because RUNDLL32 is unreliable on Windows 10/11 and doesn't always
-        commit the change to the registry.
-    #>
     param(
         [Parameter(Mandatory)][string]$ImagePath,
         [Parameter(Mandatory)]$Manifest
@@ -987,37 +1229,53 @@ public class WinWallpaper {
 
 function Deploy-Wallpapers {
     <#
-        Deploy bundled wallpapers one file at a time via Backup-And-Deploy so
-        each file gets the same backup protection as other config files.
-        Backup subdir mirrors the wallpaper's relative path under
-        assets/wallpapers/, e.g. assets/wallpapers/dark/x.jpg →
-        ~/.windows-rice-backup/wallpapers/dark/x.jpg.backup-<ts>.
+        Wallpaper source priority:
+          1. themes\<theme>\wallpapers\   (theme-specific set)
+          2. assets\wallpapers\           (base set)
 
-        After deployment, a file named `default.*` (any image extension) is
-        set as the desktop wallpaper on first run.
+        If the theme folder exists, it replaces the base set entirely — a
+        theme that ships its own wallpapers wants those, not a mix.
+
+        Each wallpaper is deployed through Backup-And-Deploy, so a file
+        replacing a same-named user file gets a timestamped backup.
     #>
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$ThemeName
+    )
+
     Write-Section 'Wallpapers'
 
-    $src = Join-Path $AssetRoot 'wallpapers'
+    $themeWallDir = if ($ThemeName) { Join-Path (Join-Path $ThemeRoot $ThemeName) 'wallpapers' } else { $null }
+    $baseWallDir  = Join-Path $AssetRoot 'wallpapers'
+
+    if ($themeWallDir -and (Test-Path -LiteralPath $themeWallDir)) {
+        $src    = $themeWallDir
+        $source = "theme '$ThemeName'"
+    } else {
+        $src    = $baseWallDir
+        $source = 'base'
+    }
+
     $files = @()
     if (Test-Path -LiteralPath $src) {
         $files = @(Get-ChildItem -LiteralPath $src -File -Recurse -ErrorAction SilentlyContinue)
     }
 
     if ($files.Count -eq 0) {
-        Write-Skip 'No wallpapers bundled in the repository yet.'
-        Add-Summary 'Skipped' 'Wallpapers (no files in repo)'
+        Write-Skip "No wallpapers found ($source)."
+        Add-Summary 'Skipped' "Wallpapers (no files — $source)"
         if (-not $DryRun -and -not (Test-Path -LiteralPath $WallpaperDir)) {
             New-Item -ItemType Directory -Path $WallpaperDir -Force | Out-Null
         }
         return
     }
 
-    foreach ($f in $files) {
-        $relative = $f.FullName.Substring($src.Length).TrimStart('\', '/')
-        $destination = Join-Path $WallpaperDir $relative
+    Write-Info "using wallpaper set: $source ($($files.Count) files)"
 
-        $relativeDir = Split-Path -Parent $relative
+    foreach ($f in $files) {
+        $relative     = $f.FullName.Substring($src.Length).TrimStart('\', '/')
+        $destination  = Join-Path $WallpaperDir $relative
+        $relativeDir  = Split-Path -Parent $relative
         $backupSubdir = if ($relativeDir) { Join-Path 'wallpapers' $relativeDir } else { 'wallpapers' }
 
         Backup-And-Deploy `
@@ -1027,7 +1285,7 @@ function Deploy-Wallpapers {
             -BackupSubdir $backupSubdir | Out-Null
     }
 
-    # Set a default wallpaper on first run.
+    # Set default wallpaper on first run.
     $manifest = if ($script:Manifest) { $script:Manifest } else { Get-Manifest }
     $script:Manifest = $manifest
 
@@ -1038,17 +1296,14 @@ function Deploy-Wallpapers {
     if ($default) {
         Set-DefaultWallpaper -ImagePath (Join-Path $WallpaperDir $default.Name) `
                              -Manifest $manifest
+    } else {
+        Write-WarnLine "No 'default.*' file in wallpaper set — leaving desktop wallpaper unchanged."
     }
 }
 
 # ===================================================== WINDOWS TERMINAL
 
 function ConvertTo-DeepHashtable {
-    <#
-        ConvertFrom-Json on PS 5.1 returns PSCustomObject, which is painful to
-        mutate. Convert recursively into ordered dictionaries so merging by key
-        is straightforward.
-    #>
     param($InputObject)
 
     if ($null -eq $InputObject) { return $null }
@@ -1079,12 +1334,6 @@ function ConvertTo-DeepHashtable {
 }
 
 function Merge-ArrayByKey {
-    <#
-        Merge two arrays of dictionaries keyed by a single property.
-        Base items are kept. Patch items whose key matches a base item merge
-        their fields onto the base item (patch wins). Patch items without a
-        match are appended. Idempotent.
-    #>
     param(
         [object[]]$BaseArray,
         [object[]]$PatchArray,
@@ -1112,12 +1361,6 @@ function Merge-ArrayByKey {
 }
 
 function Replace-ArrayEntriesByKey {
-    <#
-        Deterministic replacement of rice-owned entries.
-        Any base entry whose KeyName value appears in the patch array is
-        removed entirely, then all patch entries are appended. Base entries
-        with keys not present in the patch are preserved untouched.
-    #>
     param(
         [object[]]$BaseArray,
         [object[]]$PatchArray,
@@ -1147,12 +1390,6 @@ function Replace-ArrayEntriesByKey {
 }
 
 function Get-WindowsTerminalSettingsPath {
-    <#
-        Determine the settings.json path for the installed Windows Terminal
-        package. Prefer the AppxPackage identity (PackageFamilyName) which is
-        the authoritative source. Fall back to a folder scan only when the
-        Appx API is unavailable, and only when exactly one candidate exists.
-    #>
     $pkg = $null
     try {
         $pkg = Get-AppxPackage -Name 'Microsoft.WindowsTerminal' -ErrorAction Stop |
@@ -1181,7 +1418,7 @@ function Get-WindowsTerminalSettingsPath {
         if ($candidates.Count -gt 1) {
             Write-WarnLine 'Multiple Windows Terminal package folders detected:'
             foreach ($c in $candidates) {
-                Write-Host "        - $($c.FullName)" -ForegroundColor DarkGray
+                Write-Host "        · $($c.FullName)" -ForegroundColor DarkGray
             }
             Write-WarnLine 'Refusing to guess. Windows Terminal settings left untouched.'
         }
@@ -1191,12 +1428,23 @@ function Get-WindowsTerminalSettingsPath {
 }
 
 function Update-WindowsTerminalConfig {
-    param([Parameter(Mandatory)][string]$RepoSettingsPath)
+    <#
+        Source resolution: prefer themes\<theme>\terminal\settings.json,
+        fall back to configs\terminal\settings.json. The destination is
+        always the user's live Windows Terminal settings.json.
+    #>
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$ThemeName
+    )
 
     Write-Section 'Windows Terminal'
 
-    if (-not (Test-Path -LiteralPath $RepoSettingsPath)) {
-        Write-WarnLine "repo settings.json missing: $RepoSettingsPath"
+    $themeRel   = 'terminal\settings.json'
+    $sourcePath = Resolve-ThemeFile -ThemeName $ThemeName -RelPath $themeRel
+    $marker     = Get-ThemeMarker   -ThemeName $ThemeName -RelPath $themeRel
+
+    if (-not (Test-Path -LiteralPath $sourcePath)) {
+        Write-WarnLine "settings.json missing: $sourcePath"
         Add-Summary 'Skipped' 'Windows Terminal (repo file missing)'
         return
     }
@@ -1216,18 +1464,17 @@ function Update-WindowsTerminalConfig {
         }
     }
 
-    # Fresh install of Windows Terminal: no existing settings.json.
     if (-not (Test-Path -LiteralPath $wtSettingsPath)) {
-        Write-Info 'No existing settings.json — deploying repo settings verbatim.'
-        Backup-And-Deploy -Source $RepoSettingsPath -Destination $wtSettingsPath `
-                          -Label 'Windows Terminal settings.json' `
+        Write-Info "No existing settings.json — deploying repo settings verbatim$marker."
+        Backup-And-Deploy -Source $sourcePath -Destination $wtSettingsPath `
+                          -Label "Windows Terminal settings.json$marker" `
                           -BackupSubdir 'terminal'
         return
     }
 
     try {
         $userRaw = Get-Content -LiteralPath $wtSettingsPath -Raw -ErrorAction Stop
-        $repoRaw = Get-Content -LiteralPath $RepoSettingsPath -Raw -ErrorAction Stop
+        $repoRaw = Get-Content -LiteralPath $sourcePath -Raw -ErrorAction Stop
         $userObj = $userRaw | ConvertFrom-Json -ErrorAction Stop
         $repoObj = $repoRaw | ConvertFrom-Json -ErrorAction Stop
     } catch {
@@ -1242,7 +1489,6 @@ function Update-WindowsTerminalConfig {
     $user = ConvertTo-DeepHashtable $userObj
     $repo = ConvertTo-DeepHashtable $repoObj
 
-    # ---- profiles ---------------------------------------------------------
     if (-not $user.Contains('profiles')) { $user['profiles'] = [ordered]@{} }
     if (-not $user['profiles'].Contains('defaults')) {
         $user['profiles']['defaults'] = [ordered]@{}
@@ -1264,7 +1510,6 @@ function Update-WindowsTerminalConfig {
             -KeyName    'guid'
     }
 
-    # ---- schemes ----------------------------------------------------------
     if ($repo.Contains('schemes')) {
         if (-not $user.Contains('schemes')) { $user['schemes'] = @() }
         $user['schemes'] = Merge-ArrayByKey `
@@ -1273,7 +1518,6 @@ function Update-WindowsTerminalConfig {
             -KeyName    'name'
     }
 
-    # ---- actions ----------------------------------------------------------
     if ($repo.Contains('actions')) {
         if (-not $user.Contains('actions')) { $user['actions'] = @() }
         $user['actions'] = Replace-ArrayEntriesByKey `
@@ -1282,7 +1526,6 @@ function Update-WindowsTerminalConfig {
             -KeyName    'id'
     }
 
-    # ---- keybindings ------------------------------------------------------
     if ($repo.Contains('keybindings')) {
         if (-not $user.Contains('keybindings')) { $user['keybindings'] = @() }
         $user['keybindings'] = Replace-ArrayEntriesByKey `
@@ -1291,12 +1534,10 @@ function Update-WindowsTerminalConfig {
             -KeyName    'id'
     }
 
-    # ---- top-level scalars (rice wins) -----------------------------------
     foreach ($k in @('defaultProfile', 'tabWidthMode', 'useAcrylicInTabRow')) {
         if ($repo.Contains($k)) { $user[$k] = $repo[$k] }
     }
 
-    # ---- serialize + validate --------------------------------------------
     $json = $user | ConvertTo-Json -Depth 100
 
     try {
@@ -1309,12 +1550,11 @@ function Update-WindowsTerminalConfig {
     }
 
     if ($DryRun) {
-        Write-Skip 'would merge rice settings into Windows Terminal settings.json'
+        Write-Skip "would merge rice settings into Windows Terminal settings.json$marker"
         Add-Summary 'Configured' 'Windows Terminal settings.json (dry run)'
         return
     }
 
-    # ---- backup under $BackupRoot\terminal\ ------------------------------
     $backupDir  = Join-Path $BackupRoot 'terminal'
     $backupPath = Join-Path $backupDir ("settings.json.backup-" + (New-Timestamp))
     try {
@@ -1328,8 +1568,9 @@ function Update-WindowsTerminalConfig {
     }
 
     try {
-        Set-Content -LiteralPath $wtSettingsPath -Value $json -Encoding UTF8 -ErrorAction Stop
-        Write-Ok 'Windows Terminal settings.json merged'
+        # No BOM: WT parses this file as strict JSON in some code paths.
+        Write-Utf8NoBom -Path $wtSettingsPath -Content $json
+        Write-Ok "Windows Terminal settings.json merged$marker"
         Add-Summary 'Configured' 'Windows Terminal settings.json'
     } catch {
         Write-FailLine "Failed to write Windows Terminal settings: $_"
@@ -1337,7 +1578,7 @@ function Update-WindowsTerminalConfig {
     }
 }
 
-# ==================================================== PSREADLINE (BEST EFFORT)
+# ==================================================== PSREADLINE
 
 function Ensure-PSReadLine {
     param([switch]$NoInstall)
@@ -1375,7 +1616,60 @@ function Ensure-PSReadLine {
     }
 }
 
-# ============================================================ VERIFICATION
+# ==================================================== UPDATE
+
+function Invoke-RepoUpdate {
+    Write-Section 'Update'
+
+    if (-not (Test-CommandExists 'git')) {
+        Write-WarnLine 'git not found — cannot pull updates.'
+        Add-Summary 'Skipped' 'Update (git not found)'
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot '.git'))) {
+        Write-WarnLine 'Repository has no .git folder — not a git checkout.'
+        Write-WarnLine 'If this was downloaded as a ZIP, updates must be manual.'
+        Add-Summary 'Skipped' 'Update (not a git repository)'
+        return
+    }
+
+    if ($DryRun) {
+        Write-Skip "would run: git -C `"$RepoRoot`" pull --ff-only"
+        return
+    }
+
+    Write-Info "pulling latest from origin..."
+    try {
+        $out = (& git -C $RepoRoot pull --ff-only 2>&1 | Out-String)
+    } catch {
+        Write-FailLine "git pull failed: $_"
+        Add-Summary 'Failed' "Update ($_)"
+        return
+    }
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-WarnLine "git pull exited $LASTEXITCODE."
+        if ($out) {
+            foreach ($line in ($out -split "`r?`n" | Where-Object { $_ -ne '' })) {
+                Write-Host "        $line" -ForegroundColor DarkGray
+            }
+        }
+        Write-WarnLine 'If the working tree has local changes, commit or stash them first.'
+        Add-Summary 'Warnings' 'Update (git pull failed)'
+        return
+    }
+
+    if ($out -match 'Already up[ -]to[ -]date') {
+        Write-Skip 'Already up to date'
+        Add-Summary 'AlreadyInstalled' 'Repository update'
+    } else {
+        Write-Ok 'Repository updated'
+        Add-Summary 'Installed' 'Repository update'
+    }
+}
+
+# ==================================================== VERIFICATION
 
 function Invoke-Verification {
     Write-Section 'Verification'
@@ -1394,7 +1688,8 @@ function Invoke-Verification {
         'cava',
         'glazewm',
         'yasb',
-        'thide'
+        'thide',
+        'chronoterm'
     )
 
     foreach ($cmd in $commands) {
@@ -1428,9 +1723,11 @@ function Invoke-Verification {
     }
 }
 
-# =============================================================== SUMMARY
+# ==================================================== SUMMARY
 
 function Write-FinalSummary {
+    param([string]$ActiveTheme)
+
     Write-Section 'Complete'
 
     $installed  = $script:Summary['Installed'].Count
@@ -1441,29 +1738,37 @@ function Write-FinalSummary {
     $failed     = $script:Summary['Failed'].Count
 
     $rows = @(
-        @{ Label = 'Installed';       Value = $installed },
-        @{ Label = 'Already present'; Value = $already },
-        @{ Label = 'Configured';      Value = $configured },
-        @{ Label = 'Skipped';         Value = $skipped },
-        @{ Label = 'Warnings';        Value = $warnings },
-        @{ Label = 'Failed';          Value = $failed }
+        @{ Label = 'Installed';       Value = $installed;  Color = 'Green' }
+        @{ Label = 'Already present'; Value = $already;    Color = 'Gray' }
+        @{ Label = 'Configured';      Value = $configured; Color = 'Green' }
+        @{ Label = 'Skipped';         Value = $skipped;    Color = 'DarkGray' }
+        @{ Label = 'Warnings';        Value = $warnings;   Color = 'Yellow' }
+        @{ Label = 'Failed';          Value = $failed;     Color = 'Red' }
     )
 
     foreach ($r in $rows) {
-        Write-Host ('  ' + $r.Label.PadRight(16) + $r.Value) -ForegroundColor Gray
+        $valueColor = if ($r.Value -eq 0) { 'DarkGray' } else { $r.Color }
+        Write-Host ('  ' + $r.Label.PadRight(18)) -NoNewline -ForegroundColor Gray
+        Write-Host $r.Value -ForegroundColor $valueColor
     }
 
     Write-Host ''
 
     if ($failed -gt 0) {
-        Write-Host '  [FAIL] Installation completed with errors.' -ForegroundColor Red
+        Write-Host '  ✗ Installation completed with errors.' -ForegroundColor Red
     } elseif ($warnings -gt 0) {
-        Write-Host '  [WARN] Installation completed with warnings.' -ForegroundColor Yellow
+        Write-Host '  ▲ Installation completed with warnings.' -ForegroundColor Yellow
     } else {
-        Write-Host '  Windows-Rice installation completed successfully.' -ForegroundColor Green
+        Write-Host '  ✓ Windows-Rice installation completed successfully.' -ForegroundColor Green
     }
 
     Write-Host ''
+
+    if ($ActiveTheme) {
+        Write-Host '  Active theme' -ForegroundColor Cyan
+        Write-Host "    $ActiveTheme" -ForegroundColor Gray
+        Write-Host ''
+    }
 
     if (Test-Path -LiteralPath $BackupRoot) {
         Write-Host '  Backup location' -ForegroundColor Cyan
@@ -1475,12 +1780,18 @@ function Write-FinalSummary {
     }
 
     Write-Host '  Next steps' -ForegroundColor Cyan
-    Write-Host '    1. Close and reopen your terminal so PATH and font changes are loaded.' -ForegroundColor Gray
-    Write-Host '    2. Start (or restart) GlazeWM.' -ForegroundColor Gray
-    Write-Host '    3. YASB and GlazeWM AutoTiler launch automatically through GlazeWM.' -ForegroundColor Gray
-    Write-Host '    4. Thide hides the taskbar on next login.' -ForegroundColor Gray
-    Write-Host '    5. If Windows Terminal was already running, restart it.' -ForegroundColor Gray
-    Write-Host '    6. Log out or restart Windows only if something still does not refresh.' -ForegroundColor Gray
+    $nextSteps = @(
+        'Close and reopen your terminal so PATH and font changes are loaded.',
+        'Start (or restart) GlazeWM.',
+        'YASB and GlazeWM AutoTiler launch automatically through GlazeWM.',
+        'Thide hides the taskbar on next login.',
+        'If Windows Terminal was already running, restart it.',
+        'Log out or restart Windows only if something still does not refresh.'
+    )
+    for ($i = 0; $i -lt $nextSteps.Count; $i++) {
+        Write-Host ('    ' + ($i + 1) + '. ') -NoNewline -ForegroundColor DarkCyan
+        Write-Host $nextSteps[$i] -ForegroundColor Gray
+    }
     Write-Host ''
 
     Write-Separator
@@ -1490,8 +1801,6 @@ function Write-FinalSummary {
 # ================================================================== MAIN
 
 Write-Banner 'Installation & configuration'
-Write-Section 'Windows-Rice • Install'
-Write-EnvBlock
 
 # Sanity check: repository layout -------------------------------------------
 $requiredPaths = @(
@@ -1508,10 +1817,79 @@ $requiredPaths = @(
 $missing = @($requiredPaths | Where-Object { -not (Test-Path -LiteralPath $_) })
 if ($missing.Count -gt 0) {
     Write-FailLine 'Repository layout is incomplete. Missing:'
-    foreach ($m in $missing) { Write-Host "        - $m" -ForegroundColor Red }
+    foreach ($m in $missing) { Write-Host "        · $m" -ForegroundColor Red }
     Write-Host ''
     Write-WarnLine 'Run install.ps1 from the repository root, or re-clone the repository.'
     exit 1
+}
+
+# ------------------------------------------------------------------
+# Theme resolution
+#
+# 'mocha' is a reserved name: it's the base config set in configs\, not a
+# folder under themes\. Passing -Theme mocha is equivalent to passing no
+# theme at all — both use the base configs.
+#
+# $ThemeFolderName is the folder under themes\ to override from. Empty
+# string means "use base configs only". It's what's passed to the deploy
+# functions.
+#
+# $ActiveTheme is the display name shown in the env block and summary, and
+# is what's recorded in the manifest.
+# ------------------------------------------------------------------
+$manifest = Get-Manifest
+$script:Manifest = $manifest
+
+# Did the user pass -Theme at all?
+$themeExplicitlyProvided = $PSBoundParameters.ContainsKey('Theme')
+
+# Normalize 'mocha' to empty (meaning "use base configs").
+$requestedFolderName = if ($themeExplicitlyProvided -and $Theme -ne 'mocha') { $Theme } else { '' }
+
+# If a non-mocha theme was requested, verify the folder exists.
+if ($themeExplicitlyProvided -and $requestedFolderName) {
+    $themeFolder = Join-Path $ThemeRoot $requestedFolderName
+    if (-not (Test-Path -LiteralPath $themeFolder)) {
+        Write-FailLine "Theme '$requestedFolderName' not found at themes\$requestedFolderName\"
+        if (Test-Path -LiteralPath $ThemeRoot) {
+            $available = @(Get-ChildItem -LiteralPath $ThemeRoot -Directory -ErrorAction SilentlyContinue |
+                            Select-Object -ExpandProperty Name)
+            Write-Host '    Available themes:' -ForegroundColor Gray
+            Write-Host '        · mocha (base configs)' -ForegroundColor Gray
+            foreach ($t in $available) { Write-Host "        · $t" -ForegroundColor Gray }
+        }
+        Write-Host ''
+        exit 1
+    }
+}
+
+# Resolve the folder name to deploy from.
+if ($themeExplicitlyProvided) {
+    # Explicit -Theme wins over any recorded preference.
+    $ThemeFolderName = $requestedFolderName
+} elseif ($manifest.preferences -and $manifest.preferences.theme -and $manifest.preferences.theme -ne 'mocha') {
+    # Manifest has a non-mocha theme recorded; verify the folder still exists.
+    $recorded = $manifest.preferences.theme
+    if (Test-Path -LiteralPath (Join-Path $ThemeRoot $recorded)) {
+        $ThemeFolderName = $recorded
+    } else {
+        Write-WarnLine "Recorded theme '$recorded' no longer exists — falling back to mocha."
+        $ThemeFolderName = ''
+    }
+} else {
+    # No explicit flag, no recorded non-mocha preference — use base configs.
+    $ThemeFolderName = ''
+}
+
+# Display name always resolves to something readable.
+$ActiveTheme = if ($ThemeFolderName) { $ThemeFolderName } else { 'mocha' }
+
+Write-Section 'Windows-Rice • Install'
+Write-EnvBlock -ActiveTheme $ActiveTheme
+
+# 0. Update (opt-in) --------------------------------------------------------
+if ($Update) {
+    Invoke-RepoUpdate
 }
 
 # 1. Packages ---------------------------------------------------------------
@@ -1533,25 +1911,35 @@ if (-not $SkipFonts) {
     Add-Summary 'Skipped' 'JetBrainsMono Nerd Font (package installation disabled)'
 }
 
-# 3. Extras (Thide, AutoTiler, Flow Launcher, Windhawk) --------------------
+# 3. Extras -----------------------------------------------------------------
 if (-not $SkipPackages) {
     Install-Extras
 } else {
     Write-Section 'Extras'
-    Write-Skip 'Skipping Thide, AutoTiler, Flow Launcher, Windhawk (-SkipPackages)'
-    Add-Summary 'Skipped' 'Extras (Thide, AutoTiler, Flow Launcher, Windhawk)'
+    Write-Skip 'Skipping all extras (-SkipPackages)'
+    Add-Summary 'Skipped' 'Extras (all skipped by -SkipPackages)'
 }
 
 # 4. Configs ----------------------------------------------------------------
-Deploy-AllConfigs
-Deploy-Wallpapers
+Deploy-AllConfigs -ThemeName $ThemeFolderName
+
+# Record the resolved theme in the manifest.
+$manifest = if ($script:Manifest) { $script:Manifest } else { Get-Manifest }
+if (-not $manifest.preferences) { $manifest.preferences = [ordered]@{} }
+if ($manifest.preferences.theme -ne $ActiveTheme) {
+    $manifest.preferences.theme = $ActiveTheme
+    $script:Manifest = $manifest
+    Save-Manifest -Manifest $manifest
+}
+
+Deploy-Wallpapers -ThemeName $ThemeFolderName
 
 # 5. PSReadLine -------------------------------------------------------------
 Ensure-PSReadLine -NoInstall:$SkipPSReadLineInstall
 
 # 6. Windows Terminal -------------------------------------------------------
 if (-not $SkipTerminal) {
-    Update-WindowsTerminalConfig -RepoSettingsPath (Join-Path $ConfigRoot 'terminal\settings.json')
+    Update-WindowsTerminalConfig -ThemeName $ThemeFolderName
 } else {
     Write-Section 'Windows Terminal'
     Write-Skip 'Skipping Windows Terminal (-SkipTerminal)'
@@ -1562,4 +1950,4 @@ if (-not $SkipTerminal) {
 Invoke-Verification
 
 # 8. Summary ----------------------------------------------------------------
-Write-FinalSummary
+Write-FinalSummary -ActiveTheme $ActiveTheme

@@ -1,0 +1,15 @@
+[colors]
+enabled = true
+hours   = "#EBBCBA"   # primary   → rose
+minutes = "#9CCFD8"   # secondary → foam
+seconds = "#C4A7E7"   # accent    → iris (depth)
+separator = "#524F67" # border    → highlight_high
+date = "#E0DEF4"      # text      → text
+day = "#F6C177"       # yellow    → gold (secondary emphasis)
+ampm = "#908CAA"      # text_muted → subtle
+timezone = "#908CAA"  # text_muted → subtle
+border = "#524F67"    # border    → highlight_high
+title = "#F6C177"     # yellow    → gold (secondary emphasis)
+background = "#191724" # background → base
+late_night_hours = "#6E6A86" # text_subtle → muted
+hour_palette = []
