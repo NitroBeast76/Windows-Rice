@@ -64,7 +64,7 @@ widgets:
   home:
     type: yasb.home.HomeWidget
     options:
-      label: "<span>家</span>"
+      label: "<span>▣</span>"
       menu_list:
       - title: User Home
         path: '~'
