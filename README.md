@@ -66,9 +66,10 @@ If you don't know what half of those do, install and find out. That's the fun pa
 | Component | Role |
 |---|---|
 | **ChronoTerm** | A terminal clock. Yes, a clock. In your terminal. With a config file. Ricing is about joy, not utility. |
-| **rmatrix** | The falling green code from The Matrix, for Windows. Rust port, because the original cmatrix only runs on Windows via MSYS2, which is nobody's idea of a good time. |
+| **cmatrix** | The falling green code from The Matrix, for Windows. Native C port of the original, no MSYS2 or Cygwin needed. |
 | **btop config** | `color_theme = "TTY"`, so btop follows your terminal palette automatically. Change the theme, btop changes too. |
 | **Themes** | Full theme system. See below. |
+| **Live theme swap** | Switching themes tells GlazeWM to reload its config and re-applies the theme's default wallpaper. No manual `Alt+Shift+R`. |
 
 ### Fonts
 
@@ -105,7 +106,7 @@ The rice ships with five themes. One is the base config, four are overrides.
 .\install.ps1 -Theme kanagawa -SkipPackages -SkipFonts
 ```
 
-The `-SkipPackages -SkipFonts` tells the installer to skip the boring bits and just swap the config. Takes five seconds. Your terminal, YASB bar, Cava gradient, Fastfetch logo, and wallpapers all swap at once.
+The `-SkipPackages -SkipFonts` tells the installer to skip the boring bits and just swap the config. Takes five seconds. Your terminal, YASB bar, Cava gradient, Fastfetch logo, wallpaper, and GlazeWM config all swap at once — GlazeWM gets told to reload itself, no manual keypress needed.
 
 ### How themes actually work
 
@@ -129,6 +130,8 @@ themes/kanagawa/
 **`mocha` is a reserved name.** It refers to the base configs in `configs/` — there is no `themes/mocha/` folder. Running `-Theme mocha` is the same as running with no theme at all. Both deploy the base configs.
 
 The active theme is recorded in the manifest. A plain `.\install.ps1` afterward respects your last choice. No "wait, why did my bar turn magenta again."
+
+**The wallpaper follows the theme.** On first install, the theme's `default.*` wallpaper gets applied. On a theme swap, the new theme's wallpaper replaces it. On a re-run with the same theme, it's left alone — so if you've picked your own wallpaper since, that choice survives.
 
 ### Adding your own theme
 
@@ -240,11 +243,12 @@ In order:
 4. Installs the Nerd Font (unless `-SkipFonts` or `-SkipPackages`).
 5. Deploys configuration files.
 6. Deploys wallpapers.
-7. Ensures PSReadLine is present (skipped under `-SkipPackages`).
-8. Merges your Windows Terminal `settings.json` (unless `-SkipTerminal`).
-9. Writes an installation manifest.
-10. Verifies the result.
-11. Prints a summary.
+7. Tells GlazeWM to reload its config, if it's running.
+8. Ensures PSReadLine is present (skipped under `-SkipPackages`).
+9. Merges your Windows Terminal `settings.json` (unless `-SkipTerminal`).
+10. Writes an installation manifest.
+11. Verifies the result.
+12. Prints a summary.
 
 Everything in steps 3–9 is backed up before it overwrites anything. Everything.
 
@@ -288,8 +292,8 @@ Everything in steps 3–9 is backed up before it overwrites anything. Everything
 
 `-SkipPackages` is the "do not install anything" switch. It's the nuclear option for when you just want the config files swapped.
 
-- It **does** skip: winget, Scoop, the Nerd Font, PSReadLine, Thide, GlazeWM AutoTiler, Flow Launcher, Windhawk, ChronoTerm, rmatrix.
-- It **does not** skip: config deployment, wallpaper deployment, WT merge.
+- It **does** skip: winget, Scoop, the Nerd Font, PSReadLine, Thide, GlazeWM AutoTiler, Flow Launcher, Windhawk, ChronoTerm, cmatrix.
+- It **does not** skip: config deployment, wallpaper deployment, WT merge, the GlazeWM reload.
 
 If you want a fast theme swap, use `-SkipPackages -SkipFonts`. The install finishes in seconds because there's nothing left to install.
 
@@ -375,7 +379,7 @@ None of these require configuration. They work from any shell once PATH is refre
 | `cava` | Audio visualizer | (runs inside YASB) |
 | `thide` | Hide/show taskbar | `thide hide` / `thide show` |
 | `chronoterm` | Clock in your terminal | `chronoterm` |
-| `rmatrix` | Falling code | `rmatrix` |
+| `cmatrix` | Falling code | `cmatrix` |
 
 ### A few that change how you work
 
@@ -393,7 +397,7 @@ magick input.jpg -resize 1920x -strip "$HOME\Pictures\Windows-Rice\my-wallpaper.
 
 Caps width at 1920, preserves aspect ratio, strips metadata. Same command the shrink script uses.
 
-**`chronoterm`** and **`rmatrix`** are "just because you can." There's no productivity gain. There is, however, a clock and a Matrix effect. That's the point.
+**`chronoterm`** and **`cmatrix`** are "just because you can." There's no productivity gain. There is, however, a clock and a Matrix effect. That's the point.
 
 ### When a command says "not recognized"
 
@@ -589,6 +593,8 @@ Wallpapers live in two places:
 
 The installer deploys them to `~/Pictures/Windows-Rice/` (resolved via the API, so OneDrive-safe) and sets `default.*` as your desktop wallpaper on first install.
 
+**The wallpaper follows the theme.** When you swap themes, the new theme's `default.*` gets applied. Re-running with the same theme leaves your wallpaper alone — so if you've picked your own since, that choice survives.
+
 YASB's wallpaper widget points at that folder, so everything shows up in the gallery (`Alt+W`).
 
 Each wallpaper goes through the same backup path as every other managed file. If a same-named file already exists in the destination, it's backed up before being replaced. Uninstall restores backed-up originals.
@@ -698,7 +704,7 @@ Windows-Rice configures software made by other people. Upstream projects include
 - **Fastfetch** — system information
 - **Windows Terminal**, **PowerShell** — Microsoft
 - **btop**, **fd**, **fzf**, **ripgrep**, **yazi**, **yt-dlp**, **FFmpeg**, **7-Zip**, **jq**, **zoxide**, **ImageMagick** — the CLI power tools that make a shell worth using
-- **ChronoTerm**, **rmatrix**, **Thide**, **GlazeWM AutoTiler**, **Flow Launcher**, **Windhawk** — the extras that make it fun
+- **ChronoTerm**, **cmatrix-win**, **Thide**, **GlazeWM AutoTiler**, **Flow Launcher**, **Windhawk** — the extras that make it fun
 - **JetBrains Mono** and the **Nerd Fonts** project for the font
 - **Catppuccin**, **Everforest**, **Kanagawa**, **Rosé Pine** for the palettes
 
