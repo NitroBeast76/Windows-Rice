@@ -1177,8 +1177,9 @@ function Deploy-AllConfigs {
 
     # Substitution table for text configs. YASB's wallpaper path is the only
     # current consumer; the mechanism is generic so future configs can opt in.
+    $themeSubdir = if ($ThemeName) { $ThemeName } else { 'mocha' }
     $substitutions = @{
-        '~/Pictures/Windows-Rice' = ($WallpaperDir -replace '\\', '/')
+        '~/Pictures/Windows-Rice' = (Join-Path $WallpaperDir $themeSubdir) -replace '\\', '/'
     }
 
     # ------------------------------------------------------------------
@@ -1350,6 +1351,9 @@ function Deploy-Wallpapers {
 
     Write-Section 'Wallpapers'
 
+    $themeSubdir = if ($ThemeName) { $ThemeName } else { 'mocha' }
+    $destRoot    = Join-Path $WallpaperDir $themeSubdir
+
     $themeWallDir = if ($ThemeName) { Join-Path (Join-Path $ThemeRoot $ThemeName) 'wallpapers' } else { $null }
     $baseWallDir  = Join-Path $AssetRoot 'wallpapers'
 
@@ -1379,9 +1383,13 @@ function Deploy-Wallpapers {
 
     foreach ($f in $files) {
         $relative     = $f.FullName.Substring($src.Length).TrimStart('\', '/')
-        $destination  = Join-Path $WallpaperDir $relative
+        $destination  = Join-Path $destRoot $relative
         $relativeDir  = Split-Path -Parent $relative
-        $backupSubdir = if ($relativeDir) { Join-Path 'wallpapers' $relativeDir } else { 'wallpapers' }
+        $backupSubdir = if ($relativeDir) {
+            Join-Path (Join-Path 'wallpapers' $themeSubdir) $relativeDir
+        } else {
+            Join-Path 'wallpapers' $themeSubdir
+        }
 
         Backup-And-Deploy `
             -Source       $f.FullName `
@@ -1399,7 +1407,7 @@ function Deploy-Wallpapers {
                 Select-Object -First 1
 
     if ($default) {
-        Set-DefaultWallpaper -ImagePath (Join-Path $WallpaperDir $default.Name) `
+        Set-DefaultWallpaper -ImagePath (Join-Path $destRoot $default.Name) `
                              -Manifest  $manifest `
                              -ThemeName $ThemeName
     } else {
