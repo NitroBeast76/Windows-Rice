@@ -312,7 +312,7 @@ widgets:
     type: "yasb.wallpapers.WallpapersWidget"
     options:
       label: "<span>\uf03e</span>"
-      image_path: "~/Pictures/Windows-Rice"
+      image_path: "C:\\Wallpapers" 
       tooltip: false
       gallery:
         enabled: true
