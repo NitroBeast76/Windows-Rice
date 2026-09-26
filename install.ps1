@@ -340,6 +340,44 @@ function Get-FileSha256 {
     return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
 }
 
+function Invoke-GlazeWmReload {
+    <#
+        GlazeWM loads its config once at startup and does not watch the file
+        for changes. After the installer deploys a new glazewm config (theme
+        swap, manual edit, whatever), the running instance still has the old
+        one loaded until told to re-read it.
+
+        `wm-reload-config` re-parses the config file and applies the changes
+        live. It does NOT re-run startup_commands — YASB and AutoTiler are
+        not relaunched. Safe to call whether GlazeWM is running or not.
+    #>
+    if (-not (Test-CommandExists 'glazewm')) {
+        return
+    }
+
+    $proc = Get-Process -Name 'glazewm' -ErrorAction SilentlyContinue
+    if (-not $proc) {
+        Write-Info 'GlazeWM not running — config applies on next start.'
+        return
+    }
+
+    if ($DryRun) {
+        Write-Skip 'would tell GlazeWM to reload its config'
+        return
+    }
+
+    try {
+        & glazewm command wm-reload-config 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Ok 'GlazeWM config reloaded'
+        } else {
+            Write-WarnLine "GlazeWM reload exited $LASTEXITCODE"
+        }
+    } catch {
+        Write-WarnLine "GlazeWM reload failed: $_"
+    }
+}
+
 function Backup-And-Deploy {
     <#
         Copy a repository config to its destination, backing up any existing
@@ -1205,13 +1243,45 @@ function Deploy-AllConfigs {
 }
 
 function Set-DefaultWallpaper {
+    <#
+        Applies the theme's default.* wallpaper to the desktop.
+
+        Behaviour:
+        - First install (no recorded theme): apply, remember which theme we
+          applied for.
+        - Re-run, same theme: skip. The user may have picked their own
+          wallpaper since; don't clobber it.
+        - Re-run, different theme: apply. Swapping themes is a deliberate
+          action and the wallpaper should follow.
+
+        Uses SystemParametersInfo (the Win32 API) rather than RUNDLL32,
+        because RUNDLL32 is unreliable on Windows 10/11 and doesn't always
+        commit the change to the registry.
+    #>
     param(
         [Parameter(Mandatory)][string]$ImagePath,
-        [Parameter(Mandatory)]$Manifest
+        [Parameter(Mandatory)]$Manifest,
+        [Parameter(Mandatory)][AllowEmptyString()][string]$ThemeName
     )
 
-    if ($Manifest.preferences -and $Manifest.preferences.default_wallpaper_set) {
-        Write-Skip 'Default wallpaper already applied on a previous run'
+    # Normalise: empty theme name means mocha / base configs.
+    $currentTheme = if ($ThemeName) { $ThemeName } else { 'mocha' }
+
+    # What theme did we last set the wallpaper for?
+    # - If `default_wallpaper_theme` is present, that's authoritative.
+    # - If it's missing but the legacy `default_wallpaper_set` flag is true,
+    #   assume mocha (that's what the old code always did).
+    $recordedTheme = $null
+    if ($Manifest.preferences) {
+        if ($Manifest.preferences.default_wallpaper_theme) {
+            $recordedTheme = $Manifest.preferences.default_wallpaper_theme
+        } elseif ($Manifest.preferences.default_wallpaper_set) {
+            $recordedTheme = 'mocha'
+        }
+    }
+
+    if ($recordedTheme -eq $currentTheme) {
+        Write-Skip "Default wallpaper already applied for theme '$currentTheme'"
         return
     }
 
@@ -1251,7 +1321,8 @@ public class WinWallpaper {
             if (-not $Manifest.preferences) {
                 $Manifest.preferences = [ordered]@{}
             }
-            $Manifest.preferences.default_wallpaper_set = $true
+            $Manifest.preferences.default_wallpaper_set   = $true
+            $Manifest.preferences.default_wallpaper_theme = $currentTheme
             Save-Manifest -Manifest $Manifest
         } else {
             Write-WarnLine 'SystemParametersInfo returned 0 — wallpaper unchanged'
@@ -1319,7 +1390,7 @@ function Deploy-Wallpapers {
             -BackupSubdir $backupSubdir | Out-Null
     }
 
-    # Set default wallpaper on first run.
+    # Set default wallpaper on first run (or when the theme changed).
     $manifest = if ($script:Manifest) { $script:Manifest } else { Get-Manifest }
     $script:Manifest = $manifest
 
@@ -1329,7 +1400,8 @@ function Deploy-Wallpapers {
 
     if ($default) {
         Set-DefaultWallpaper -ImagePath (Join-Path $WallpaperDir $default.Name) `
-                             -Manifest $manifest
+                             -Manifest  $manifest `
+                             -ThemeName $ThemeName
     } else {
         Write-WarnLine "No 'default.*' file in wallpaper set — leaving desktop wallpaper unchanged."
     }
@@ -1967,6 +2039,10 @@ if ($manifest.preferences.theme -ne $ActiveTheme) {
 }
 
 Deploy-Wallpapers -ThemeName $ThemeFolderName
+
+# GlazeWM needs a nudge to re-read its config after a deploy. No-op if it
+# isn't running.
+Invoke-GlazeWmReload
 
 # 5. PSReadLine -------------------------------------------------------------
 Ensure-PSReadLine -NoInstall:$SkipPSReadLineInstall
