@@ -772,26 +772,26 @@ function Install-AllPackages {
         [void](Get-WingetList)
 
         # Core rice components (winget).
-        Install-WingetPackage -Id 'Microsoft.PowerShell'      -Name 'PowerShell 7'
-        Install-WingetPackage -Id 'Microsoft.WindowsTerminal' -Name 'Windows Terminal'
-        Install-WingetPackage -Id 'glzr-io.glazewm'           -Name 'GlazeWM'
-        Install-WingetPackage -Id 'AmN.yasb'                  -Name 'YASB'
-        Install-WingetPackage -Id 'karlstav.cava'             -Name 'Cava'
+        Install-WingetPackage -Id 'Microsoft.PowerShell'      -Name 'PowerShell 7'      | Out-Null
+        Install-WingetPackage -Id 'Microsoft.WindowsTerminal' -Name 'Windows Terminal'  | Out-Null
+        Install-WingetPackage -Id 'glzr-io.glazewm'           -Name 'GlazeWM'           | Out-Null
+        Install-WingetPackage -Id 'AmN.yasb'                  -Name 'YASB'              | Out-Null
+        Install-WingetPackage -Id 'karlstav.cava'             -Name 'Cava'              | Out-Null
 
         # CLI tooling (winget).
-        Install-WingetPackage -Id 'aristocratos.btop4win'     -Name 'btop4win'
-        Install-WingetPackage -Id 'sharkdp.fd'                -Name 'fd'
-        Install-WingetPackage -Id 'junegunn.fzf'              -Name 'fzf'
-        Install-WingetPackage -Id 'BurntSushi.ripgrep.MSVC'   -Name 'ripgrep'
-        Install-WingetPackage -Id 'yt-dlp.yt-dlp'             -Name 'yt-dlp'
+        Install-WingetPackage -Id 'aristocratos.btop4win'     -Name 'btop4win'          | Out-Null
+        Install-WingetPackage -Id 'sharkdp.fd'                -Name 'fd'                | Out-Null
+        Install-WingetPackage -Id 'junegunn.fzf'              -Name 'fzf'               | Out-Null
+        Install-WingetPackage -Id 'BurntSushi.ripgrep.MSVC'   -Name 'ripgrep'           | Out-Null
+        Install-WingetPackage -Id 'yt-dlp.yt-dlp'             -Name 'yt-dlp'            | Out-Null
 
         # Yazi + supporting dependencies (winget).
-        Install-WingetPackage -Id 'sxyazi.yazi'               -Name 'Yazi'
-        Install-WingetPackage -Id 'Gyan.FFmpeg'               -Name 'FFmpeg'
-        Install-WingetPackage -Id '7zip.7zip'                 -Name '7-Zip'
-        Install-WingetPackage -Id 'jqlang.jq'                 -Name 'jq'
-        Install-WingetPackage -Id 'ajeetdsouza.zoxide'        -Name 'zoxide'
-        Install-WingetPackage -Id 'ImageMagick.ImageMagick'   -Name 'ImageMagick'
+        Install-WingetPackage -Id 'sxyazi.yazi'               -Name 'Yazi'              | Out-Null
+        Install-WingetPackage -Id 'Gyan.FFmpeg'               -Name 'FFmpeg'            | Out-Null
+        Install-WingetPackage -Id '7zip.7zip'                 -Name '7-Zip'             | Out-Null
+        Install-WingetPackage -Id 'jqlang.jq'                 -Name 'jq'                | Out-Null
+        Install-WingetPackage -Id 'ajeetdsouza.zoxide'        -Name 'zoxide'            | Out-Null
+        Install-WingetPackage -Id 'ImageMagick.ImageMagick'   -Name 'ImageMagick'       | Out-Null
     }
 
     Write-Section 'Scoop packages'
@@ -800,7 +800,7 @@ function Install-AllPackages {
     if ($scoopOk) {
         Add-ScoopBucket -Bucket 'extras'
         Add-ScoopBucket -Bucket 'nerd-fonts'
-        Install-ScoopPackage -Name 'fastfetch' -Display 'Fastfetch'
+        Install-ScoopPackage -Name 'fastfetch' -Display 'Fastfetch' | Out-Null
     } else {
         Write-WarnLine 'Skipping Scoop-based installs (Fastfetch).'
         Add-Summary 'Skipped' 'Fastfetch (Scoop unavailable)'
@@ -1036,7 +1036,7 @@ function Install-FlowLauncher {
         Add-Summary 'Skipped' 'Flow Launcher (Scoop unavailable)'
         return
     }
-    Install-ScoopPackage -Name 'flow-launcher' -Display 'Flow Launcher'
+    Install-ScoopPackage -Name 'flow-launcher' -Display 'Flow Launcher' | Out-Null
 }
 
 function Install-RMatrix {
@@ -1054,11 +1054,11 @@ function Install-RMatrix {
         Add-Summary 'Skipped' 'rmatrix (Scoop unavailable)'
         return
     }
-    Install-ScoopPackage -Name 'rmatrix' -Display 'rmatrix (cmatrix port)'
+    Install-ScoopPackage -Name 'rmatrix' -Display 'rmatrix (cmatrix port)' | Out-Null
 }
 
 function Install-Windhawk {
-    Install-WingetPackage -Id 'RamenSoftware.Windhawk' -Name 'Windhawk'
+    Install-WingetPackage -Id 'RamenSoftware.Windhawk' -Name 'Windhawk' | Out-Null
     if (-not $DryRun) {
         Write-Info 'Windhawk installed. No mods are installed by default.'
         Write-Info 'Open Windhawk to browse and install mods manually.'
