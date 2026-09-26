@@ -16,7 +16,8 @@
     - winget   — installed via winget (GlazeWM, YASB, Cava, and the CLI tools)
     - scoop    — installed via scoop  (Fastfetch, Nerd Font, Flow Launcher)
     - direct   — installed by the rice itself from a pinned source
-                 (Thide and GlazeWM AutoTiler, both from GitHub releases)
+                 (Thide, GlazeWM AutoTiler, ChronoTerm, and cmatrix-win,
+                  all downloaded from GitHub releases)
 
     PowerShell 7 and Windows Terminal are never removed, even if the manifest
     records them. Removing PowerShell 7 breaks Windows Terminal, which is
@@ -86,6 +87,8 @@ $WallpaperDir        = Join-Path $PicturesDir 'Windows-Rice'
 # Direct install locations (must match install.ps1).
 $ThideDir      = Join-Path $HomeDir '.local\bin\thide'
 $AutoTilerDir  = Join-Path $HomeDir '.local\bin\glaze-autotiler'
+$ChronoTermDir = Join-Path $HomeDir '.local\bin\chronoterm'
+$CMatrixDir    = Join-Path $HomeDir '.local\bin\cmatrix-win'
 
 $BackupRoot = Join-Path $HomeDir '.windows-rice-backup'
 $ManifestPath = Join-Path $BackupRoot 'manifest.json'
@@ -432,9 +435,10 @@ function Uninstall-ScoopPackage {
 function Uninstall-DirectPackage {
     <#
         Removes packages the rice installed from pinned sources (Thide,
-        GlazeWM AutoTiler). Each entry in the manifest's `installed.direct`
-        array has its own cleanup routine because the shape of "uninstall"
-        depends on how the thing was installed.
+        GlazeWM AutoTiler, ChronoTerm, cmatrix-win). Each entry in the
+        manifest's `installed.direct` array has its own cleanup routine
+        because the shape of "uninstall" depends on how the thing was
+        installed.
 
         Adding a new direct install requires:
         1. Registering it in install.ps1's Install-Extras
@@ -515,6 +519,68 @@ function Uninstall-DirectPackage {
 
             Write-Ok 'removed: GlazeWM AutoTiler'
             Add-Summary 'Uninstalled' 'GlazeWM AutoTiler'
+        }
+        'chronoterm' {
+            if ($DryRun) {
+                Write-Skip 'would remove ChronoTerm'
+                Add-Summary 'Uninstalled' 'ChronoTerm (dry run)'
+                return
+            }
+
+            # Kill any running instance so the exe isn't locked.
+            Get-Process -Name 'chronoterm' -ErrorAction SilentlyContinue |
+                Stop-Process -Force -ErrorAction SilentlyContinue
+
+            if (Test-Path -LiteralPath $ChronoTermDir) {
+                try {
+                    Remove-Item -LiteralPath $ChronoTermDir -Recurse -Force -ErrorAction Stop
+                } catch {
+                    Write-FailLine "ChronoTerm — could not remove $ChronoTermDir — $_"
+                    Add-Summary 'Failed' "ChronoTerm ($_)"
+                    return
+                }
+            }
+
+            $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+            if ($userPath -like "*$ChronoTermDir*") {
+                $parts = @($userPath -split ';' |
+                            Where-Object { $_ -ne '' -and $_ -ine $ChronoTermDir })
+                [Environment]::SetEnvironmentVariable('Path', ($parts -join ';'), 'User')
+                Write-Info "Removed $ChronoTermDir from user PATH"
+            }
+
+            Write-Ok 'removed: ChronoTerm'
+            Add-Summary 'Uninstalled' 'ChronoTerm'
+        }
+        'cmatrix-win' {
+            if ($DryRun) {
+                Write-Skip 'would remove cmatrix'
+                Add-Summary 'Uninstalled' 'cmatrix (dry run)'
+                return
+            }
+
+            # cmatrix is short-lived (runs, quits), so no process cleanup
+            # needed — unlike Thide or AutoTiler, which run in the tray.
+            if (Test-Path -LiteralPath $CMatrixDir) {
+                try {
+                    Remove-Item -LiteralPath $CMatrixDir -Recurse -Force -ErrorAction Stop
+                } catch {
+                    Write-FailLine "cmatrix — could not remove $CMatrixDir — $_"
+                    Add-Summary 'Failed' "cmatrix ($_)"
+                    return
+                }
+            }
+
+            $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+            if ($userPath -like "*$CMatrixDir*") {
+                $parts = @($userPath -split ';' |
+                            Where-Object { $_ -ne '' -and $_ -ine $CMatrixDir })
+                [Environment]::SetEnvironmentVariable('Path', ($parts -join ';'), 'User')
+                Write-Info "Removed $CMatrixDir from user PATH"
+            }
+
+            Write-Ok 'removed: cmatrix'
+            Add-Summary 'Uninstalled' 'cmatrix'
         }
         default {
             Write-WarnLine "No uninstall handler for direct package '$Id' — skipping"
@@ -724,7 +790,7 @@ function Uninstall-AllPackages {
         }
     }
 
-    # -------- direct (Thide, AutoTiler) -----------------------------------
+    # -------- direct (Thide, AutoTiler, ChronoTerm, cmatrix) --------------
     $directIds = @($manifest.direct)
     if ($directIds.Count -eq 0) {
         Write-Host ''
@@ -818,11 +884,11 @@ function Write-FinalSummary {
     $failed      = $script:Summary['Failed'].Count
 
     $rows = @(
-        @{ Label = 'Restored';    Value = $restored },
-        @{ Label = 'Removed';     Value = $removed },
-        @{ Label = 'Uninstalled'; Value = $uninstalled },
-        @{ Label = 'Skipped';     Value = $skipped },
-        @{ Label = 'Warnings';    Value = $warnings },
+        @{ Label = 'Restored';    Value = $restored }
+        @{ Label = 'Removed';     Value = $removed }
+        @{ Label = 'Uninstalled'; Value = $uninstalled }
+        @{ Label = 'Skipped';     Value = $skipped }
+        @{ Label = 'Warnings';    Value = $warnings }
         @{ Label = 'Failed';      Value = $failed }
     )
 

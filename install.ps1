@@ -1030,6 +1030,58 @@ function Install-ChronoTerm {
     }
 }
 
+function Install-CMatrixWin {
+    <#
+        cmatrix-win — native Windows port of cmatrix. Single C file, no
+        ncurses / MSYS / Cygwin dependencies. Distributed as a pre-built
+        cmatrix.exe on GitHub releases.
+
+        Uses the "latest release" download URL so this never needs updating
+        when upstream cuts a new version. The asset is always named
+        cmatrix.exe (confirmed in the upstream README).
+
+        Replaces the previous rmatrix scoop package, which doesn't actually
+        exist in any bucket. See https://github.com/nxstynate/cmatrix-win
+    #>
+    $dir = Join-Path $HomeDir '.local\bin\cmatrix-win'
+    $exe = Join-Path $dir 'cmatrix.exe'
+
+    Write-Section 'cmatrix'
+
+    if (Test-Path -LiteralPath $exe) {
+        Write-Skip 'cmatrix already installed'
+        Add-Summary 'AlreadyInstalled' 'cmatrix'
+        return
+    }
+
+    if ($DryRun) {
+        Write-Skip "would download cmatrix.exe (latest release) and add to PATH"
+        Add-Summary 'Installed' 'cmatrix (dry run)'
+        return
+    }
+
+    $url = "https://github.com/nxstynate/cmatrix-win/releases/latest/download/cmatrix.exe"
+
+    try {
+        Write-Info "downloading cmatrix.exe (latest release)..."
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        Invoke-WebRequest -Uri $url -OutFile $exe -UseBasicParsing -ErrorAction Stop
+
+        $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+        if ($userPath -notlike "*$dir*") {
+            [Environment]::SetEnvironmentVariable('Path', "$userPath;$dir", 'User')
+            Write-Info "Added $dir to user PATH"
+        }
+
+        Write-Ok 'cmatrix installed'
+        Add-Summary 'Installed' 'cmatrix'
+        Register-ManifestPackage -Manager 'direct' -Id 'cmatrix-win'
+    } catch {
+        Write-FailLine "cmatrix — $_"
+        Add-Summary 'Failed' "cmatrix ($_)"
+    }
+}
+
 function Install-FlowLauncher {
     if (-not (Test-CommandExists 'scoop')) {
         Write-Skip 'Scoop unavailable — cannot install Flow Launcher'
@@ -1037,24 +1089,6 @@ function Install-FlowLauncher {
         return
     }
     Install-ScoopPackage -Name 'flow-launcher' -Display 'Flow Launcher' | Out-Null
-}
-
-function Install-RMatrix {
-    <#
-        rmatrix — Rust port of cmatrix. The original cmatrix has no pre-built
-        native Windows binary and would require MSYS2 or a compile step;
-        rmatrix is the equivalent that installs cleanly via scoop.
-
-        Note: rmatrix is not guaranteed to be in the main or extras bucket.
-        If this install fails with "couldn't find manifest", the correct
-        bucket needs to be added first.
-    #>
-    if (-not (Test-CommandExists 'scoop')) {
-        Write-Skip 'Scoop unavailable — cannot install rmatrix'
-        Add-Summary 'Skipped' 'rmatrix (Scoop unavailable)'
-        return
-    }
-    Install-ScoopPackage -Name 'rmatrix' -Display 'rmatrix (cmatrix port)' | Out-Null
 }
 
 function Install-Windhawk {
@@ -1071,7 +1105,7 @@ function Install-Extras {
     Install-FlowLauncher
     Install-Windhawk
     Install-ChronoTerm
-    Install-RMatrix
+    Install-CMatrixWin
 }
 
 # ======================================================= CONFIG DEPLOYMENT
