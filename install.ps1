@@ -114,7 +114,12 @@ $GlazeWmDir    = Join-Path $HomeDir '.glzr\glazewm'
 $CavaDir       = Join-Path $HomeDir '.config\cava'
 $FastfetchDir  = Join-Path $HomeDir '.config\fastfetch'
 $BtopDir       = Join-Path $HomeDir '.config\btop'
-$StarshipDir   = Join-Path $HomeDir '.config\starship'
+
+# Starship reads a single file directly inside .config\, not a folder.
+# The repo stores it at configs\starship\starship.toml (theme overrides at
+# themes\<name>\starship\starship.toml) for symmetry with every other
+# component; only the destination differs.
+$StarshipConfigPath = Join-Path $HomeDir '.config\starship.toml'
 
 # ChronoTerm reads %APPDATA%\chronoterm\config.toml on first run. We resolve
 # %APPDATA% through the Windows API rather than $env:APPDATA so it stays
@@ -1197,7 +1202,7 @@ function Deploy-AllConfigs {
         @{ Rel = 'powershell\Microsoft.PowerShell_profile.ps1'; Dest = $PwshProfilePath;                        Subdir = 'powershell';  Label = 'PowerShell profile' }
         @{ Rel = 'chronoterm\config.toml';               Dest = (Join-Path $ChronoTermDir 'config.toml');       Subdir = 'chronoterm';  Label = '%APPDATA%\chronoterm\config.toml' }
         @{ Rel = 'btop\btop.conf';                       Dest = (Join-Path $BtopDir      'btop.conf');          Subdir = 'btop';        Label = '~/.config/btop/btop.conf' }
-        @{ Rel = 'starship\starship.toml';               Dest = (Join-Path $StarshipDir  'starship.toml');      Subdir = 'starship';    Label = '~/.config/starship.toml' }
+        @{ Rel = 'starship\starship.toml';               Dest = $StarshipConfigPath;                            Subdir = 'starship';    Label = '~/.config/starship.toml' }
     )
     # ------------------------------------------------------------------
 
@@ -1828,7 +1833,8 @@ function Invoke-Verification {
         (Join-Path $YasbDir     'config.yaml'),
         (Join-Path $YasbDir     'styles.css'),
         (Join-Path $CavaDir     'config'),
-        $PwshProfilePath
+        $PwshProfilePath,
+        $StarshipConfigPath
     )
 
     foreach ($f in $files) {
