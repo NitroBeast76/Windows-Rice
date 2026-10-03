@@ -1806,3 +1806,150 @@ which is 16 pixels same as the other sections. */
 .audio-visualizer-widget .audio-visualizer-canvas {
     qproperty-fillbrush: var(--accent);
 }
+
+/* ═══════════════════════════════════════
+   Battery Widget
+   ═══════════════════════════════════════ */
+
+.battery-widget .icon {
+    padding-right: 4px;
+    color: var(--text);
+}
+
+/* Status classes — YASB applies these automatically */
+.battery-widget .icon.status-critical,
+.battery-widget .icon.status-low {
+    color: var(--redFlash);
+}
+
+.battery-widget .icon.status-high,
+.battery-widget .icon.status-full,
+.battery-widget .icon.status-charging {
+    color: var(--accent);
+}
+
+/* ═══════════════════════════════════════
+   Bluetooth Widget
+   ═══════════════════════════════════════ */
+
+.bluetooth-widget .label.alt {
+    color: var(--subtext);
+}
+
+/* ═══════════════════════════════════════
+   WiFi Widget
+   ═══════════════════════════════════════ */
+
+.wifi-widget .label.alt {
+    color: var(--subtext);
+}
+
+/* ═══════════════════════════════════════
+   GlazeWM Workspaces
+   ═══════════════════════════════════════ */
+
+.glazewm-workspaces {
+    padding: 0px 4px;
+}
+
+.glazewm-workspaces .widget-container {
+    padding: 0;
+}
+
+.glazewm-workspaces .ws-btn {
+    padding: 4px 10px;
+    margin: 0 2px;
+    border: none;
+    border-radius: var(--border-radius2);
+    background-color: transparent;
+    color: var(--text);
+    font-family: var(--system-font);
+    font-weight: var(--fontWeight);
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+/* Empty workspace — subtle, present but quiet */
+.glazewm-workspaces .ws-btn.empty {
+    color: var(--subtext);
+    background-color: transparent;
+}
+
+.glazewm-workspaces .ws-btn.empty:hover {
+    background-color: var(--hover);
+    color: var(--text);
+}
+
+/* Populated workspace — readable, not yet active */
+.glazewm-workspaces .ws-btn.populated {
+    background-color: var(--background2);
+    color: var(--text);
+}
+
+.glazewm-workspaces .ws-btn.populated:hover {
+    background-color: var(--hover);
+    color: var(--text);
+}
+
+/* Active workspace — full accent pill */
+.glazewm-workspaces .ws-btn.active_populated,
+.glazewm-workspaces .ws-btn.active_empty,
+.glazewm-workspaces .ws-btn.active {
+    background-color: var(--accent);
+    color: var(--accentText);
+}
+
+.glazewm-workspaces .ws-btn.active_populated:hover,
+.glazewm-workspaces .ws-btn.active_empty:hover,
+.glazewm-workspaces .ws-btn.active:hover {
+    background-color: var(--accent);
+    color: var(--accentText);
+}
+
+/* Offline state — GlazeWM not running */
+.glazewm-workspaces .offline-status {
+    color: var(--subtext);
+    font-size: var(--fontSize);
+    font-weight: var(--fontWeight);
+    padding: 0 6px;
+}
+
+/* ═══════════════════════════════════════
+   GlazeWM Tiling Direction
+   ═══════════════════════════════════════ */
+
+.glazewm-tiling-direction {
+    padding: 0 4px;
+}
+
+.glazewm-tiling-direction .widget-container {
+    padding: 0;
+}
+
+.glazewm-tiling-direction .btn {
+    min-width: 24px;
+    max-width: 24px;
+    padding: 0;
+    border: none;
+    background-color: transparent;
+    color: var(--text);
+    font-family: var(--icons-font);
+    font-size: var(--iconSize);
+    transition: color 0.15s ease;
+}
+
+.glazewm-tiling-direction .btn:hover {
+    color: var(--accent);
+}
+
+/* ═══════════════════════════════════════
+   GlazeWM Binding Mode (optional — only if you enable the widget)
+   ═══════════════════════════════════════ */
+
+.glazewm-binding-mode {
+    padding: 0 6px;
+}
+
+.glazewm-binding-mode .label {
+    color: var(--accent);
+    font-weight: var(--fontWeight);
+}
