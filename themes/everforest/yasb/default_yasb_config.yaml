@@ -559,7 +559,7 @@ bars:
     type: "yasb.battery.BatteryWidget"
     options:
       label: "<span>{icon}</span> {percent}%"
-      label_alt: "<span>{icon}</span> {time_remaining}"
+      label_alt: "<span>{icon}</span> {percent}% | {power}W"
       update_interval: 5000
       hide_unsupported: true
       status_thresholds:
@@ -575,7 +575,6 @@ bars:
       callbacks:
         on_left: "toggle_label"
         on_right: "do_nothing"
-
   bluetooth:
     type: "yasb.bluetooth.BluetoothWidget"
     options:
@@ -587,7 +586,6 @@ bars:
       menu_config:
         blur: true
         alignment: "center"
-
   wifi:
     type: "yasb.wifi.WifiWidget"
     options:
@@ -595,6 +593,22 @@ bars:
       label_alt: "{wifi_name} {wifi_strength}%"
       update_interval: 5000
       callbacks:
-        on_left: "toggle_label"
+        on_left: "toggle_menu"
         on_middle: "exec cmd.exe /c start ms-settings:network"
-        on_right: "do_nothing"
+        on_right: "toggle_label"
+      menu_config:
+        blur: false
+        round_corners: true
+        round_corners_type: "normal"
+        border_color: "System"
+        alignment: "right"
+        direction: "down"
+        offset_top: 6
+        offset_left: 0
+      wifi_icons: [
+        "\uec3c",  # 0% — dot
+        "\uec3d",  # 1-24% — one bar
+        "\uec3e",  # 25-49% — two bars
+        "\uec3f",  # 50-74% — three bars
+        "\ue701"   # 75-100% — full Wifi glyph
+      ]

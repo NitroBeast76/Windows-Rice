@@ -1831,8 +1831,9 @@ which is 16 pixels same as the other sections. */
     qproperty-fillbrush: var(--accent);
 }
 
+
 /* ═══════════════════════════════════════
-   Battery Widget
+    Battery Widget
    ═══════════════════════════════════════ */
 
 .battery-widget .icon {
@@ -1852,16 +1853,195 @@ which is 16 pixels same as the other sections. */
     color: var(--accent);
 }
 
+.battery-widget .widget-container .icon {
+    padding-right: 4px;
+    color: var(--text);
+}
+
+.battery-widget .widget-container .icon.status-critical,
+.battery-widget .widget-container .icon.status-low {
+    color: var(--redFlash);
+}
+
+.battery-widget .widget-container .icon.status-high,
+.battery-widget .widget-container .icon.status-full,
+.battery-widget .widget-container .icon.status-charging {
+    color: var(--accent);
+}
+
 /* ═══════════════════════════════════════
-   Bluetooth Widget
+    Bluetooth Widget
    ═══════════════════════════════════════ */
 
 .bluetooth-widget .label.alt {
     color: var(--subtext);
 }
 
+.bluetooth-widget .icon,
+.bluetooth-widget .label {
+    font-family: 'Segoe Fluent Icons';
+}
+
 /* ═══════════════════════════════════════
-   WiFi Widget
+   Bluetooth Menu
+   ═══════════════════════════════════════ */
+
+.bluetooth-menu {
+    background-color: var(--background);
+    border: 1px solid var(--border);
+    border-radius: var(--border-radius);
+    min-width: 360px;
+    max-width: 360px;
+    min-height: 420px;
+    font-family: var(--system-font);
+}
+
+.bluetooth-menu .header {
+    padding: 12px;
+    background-color: var(--background2);
+    border-bottom: 1px solid var(--border);
+}
+
+.bluetooth-menu .header .title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.bluetooth-menu .header .power-button {
+    background-color: var(--background2);
+    border: none;
+    border-radius: var(--border-radius2);
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 14px;
+}
+
+.bluetooth-menu .header .power-button:checked {
+    background-color: var(--accent);
+    color: var(--accentText);
+}
+
+.bluetooth-menu .progress-bar {
+    min-height: 2px;
+    max-height: 2px;
+    color: var(--accent);
+}
+
+.bluetooth-menu .bluetooth-list {
+    background-color: transparent;
+}
+
+.bluetooth-menu .section {
+    background-color: transparent;
+}
+
+.bluetooth-menu .section-title {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 10px 12px 4px;
+    color: var(--subtext);
+}
+
+.bluetooth-menu .bluetooth-item {
+    min-height: 40px;
+    padding: 8px 12px;
+    margin: 2px 6px;
+    border-radius: var(--border-radius2);
+}
+
+.bluetooth-menu .bluetooth-item:hover {
+    background-color: var(--hover);
+}
+
+.bluetooth-menu .bluetooth-item.active {
+    background-color: var(--background2);
+}
+
+.bluetooth-menu .bluetooth-item .icon {
+    font-family: 'Segoe Fluent Icons';
+    font-size: 18px;
+    color: var(--text);
+    margin-right: 10px;
+}
+
+.bluetooth-menu .bluetooth-item .name {
+    font-size: 14px;
+    color: var(--text);
+    font-family: var(--system-font);
+}
+
+.bluetooth-menu .bluetooth-item .status {
+    font-size: 12px;
+    color: var(--subtext);
+    font-family: var(--system-font);
+}
+
+.bluetooth-menu .bluetooth-item .battery {
+    font-size: 12px;
+    color: var(--subtext);
+    font-family: var(--system-font);
+}
+
+.bluetooth-menu .bluetooth-item .battery-icon {
+    font-family: 'Segoe Fluent Icons';
+    color: var(--text);
+}
+
+.bluetooth-menu .bluetooth-item .controls-container {
+    padding-top: 8px;
+}
+
+.bluetooth-menu .bluetooth-item .connect {
+    background-color: var(--accent);
+    color: var(--accentText);
+    border: none;
+    border-radius: var(--border-radius2);
+    padding: 4px 20px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.bluetooth-menu .bluetooth-item .connect:hover {
+    background-color: var(--hover);
+    color: var(--text);
+}
+
+.bluetooth-menu .footer {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 12px;
+    color: var(--subtext);
+    background-color: var(--background2);
+    border-top: 1px solid var(--border);
+}
+
+.bluetooth-menu .footer .settings-button {
+    font-family: var(--system-font);
+    background-color: transparent;
+    border: none;
+    padding: 0 2px;
+    min-width: 26px;
+    min-height: 26px;
+    color: var(--text);
+}
+
+.bluetooth-menu .footer .scan-icon {
+    font-family: 'Segoe Fluent Icons';
+    background-color: transparent;
+    border: none;
+    min-width: 26px;
+    min-height: 26px;
+    color: var(--text);
+}
+
+.bluetooth-menu .footer .scan-icon:hover {
+    color: var(--accent);
+}
+
+/* ═══════════════════════════════════════
+    WiFi Widget
    ═══════════════════════════════════════ */
 
 .wifi-widget .label.alt {
@@ -1869,7 +2049,274 @@ which is 16 pixels same as the other sections. */
 }
 
 /* ═══════════════════════════════════════
-   GlazeWM Workspaces
+   WiFi Menu
+   ═══════════════════════════════════════ */
+
+.wifi-menu {
+    background-color: var(--background);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    min-width: 360px;
+    max-width: 360px;
+    min-height: 420px;
+    font-family: var(--system-font);
+}
+
+/* Header — top corners must match the popup radius or they clip out square */
+.wifi-menu .header {
+    padding: 12px;
+    background-color: var(--background2);
+    border-bottom: 1px solid var(--border);
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+}
+
+.wifi-menu .header .title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.wifi-menu .header .icon {
+    font-family: 'Segoe Fluent Icons';
+    font-size: 16px;
+    color: var(--text);
+    margin-right: 8px;
+}
+
+.wifi-menu .header .power-button {
+    background-color: var(--background2);
+    border: none;
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 14px;
+    min-height: 22px;
+}
+
+.wifi-menu .header .power-button:checked {
+    background-color: var(--accent);
+    color: var(--accentText);
+}
+
+.wifi-menu .header .power-button:hover {
+    background-color: var(--hover);
+    color: var(--text);
+}
+
+.wifi-menu .progress-bar {
+    min-height: 2px;
+    max-height: 2px;
+    color: var(--accent);
+}
+
+.wifi-menu .wifi-list {
+    background-color: transparent;
+}
+
+.wifi-menu .section {
+    background-color: transparent;
+}
+
+.wifi-menu .section-title {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 10px 12px 4px;
+    color: var(--subtext);
+}
+
+/* ═══════════════════════════════════════
+   WiFi items
+   ═══════════════════════════════════════ */
+
+.wifi-menu .wifi-item {
+    min-height: 68px;
+    padding: 8px 12px;
+    margin: 2px 6px;
+    border-radius: 8px;
+}
+
+.wifi-menu .wifi-item:hover {
+    background-color: var(--hover);
+}
+
+.wifi-menu .wifi-item.active {
+    background-color: var(--background2);
+}
+
+.wifi-menu .wifi-item .icon {
+    font-family: 'Segoe Fluent Icons';
+    font-size: 18px;
+    color: var(--text);
+    margin-right: 10px;
+}
+
+.wifi-menu .wifi-item .name {
+    font-size: 14px;
+    color: var(--text);
+    font-family: var(--system-font);
+}
+
+.wifi-menu .wifi-item .status {
+    font-size: 12px;
+    color: var(--subtext);
+    font-family: var(--system-font);
+}
+
+.wifi-menu .wifi-item .signal {
+    font-size: 12px;
+    color: var(--subtext);
+    font-family: var(--system-font);
+}
+
+.wifi-menu .wifi-item .signal-icon {
+    font-family: 'Segoe Fluent Icons';
+    color: var(--text);
+}
+
+.wifi-menu .wifi-item .controls-container {
+    padding-top: 6px;
+}
+
+/* ═══════════════════════════════════════
+   Connect / Disconnect buttons
+   Locked size + explicit radius so Qt never
+   squeezes them or drops the rounding.
+   ═══════════════════════════════════════ */
+
+.wifi-menu .wifi-item .connect,
+.wifi-menu .wifi-item .disconnect {
+    min-width: 96px;
+    max-width: 96px;
+    min-height: 28px;
+    max-height: 28px;
+    padding: 0;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--system-font);
+}
+
+.wifi-menu .wifi-item .connect {
+    background-color: var(--accent);
+    color: var(--accentText);
+}
+
+.wifi-menu .wifi-item .connect:hover {
+    background-color: var(--hover);
+    color: var(--text);
+}
+
+.wifi-menu .wifi-item .disconnect {
+    background-color: var(--background2);
+    color: var(--text);
+}
+
+.wifi-menu .wifi-item .disconnect:hover {
+    background-color: var(--hover);
+    color: var(--text);
+}
+
+/* ═══════════════════════════════════════
+   Password prompt for secured networks
+   ═══════════════════════════════════════ */
+
+.wifi-menu .password-container {
+    padding: 8px 12px;
+}
+
+.wifi-menu .password-input {
+    background-color: var(--background2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: var(--system-font);
+    font-size: 13px;
+    padding: 6px 10px;
+    outline: none;
+    min-height: 26px;
+}
+
+.wifi-menu .password-input:focus {
+    border: 1px solid var(--accent);
+}
+
+.wifi-menu .password-container .submit {
+    background-color: var(--accent);
+    color: var(--accentText);
+    border: none;
+    border-radius: 6px;
+    padding: 0;
+    min-width: 76px;
+    max-width: 76px;
+    min-height: 28px;
+    max-height: 28px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-left: 6px;
+}
+
+.wifi-menu .password-container .submit:hover {
+    background-color: var(--hover);
+    color: var(--text);
+}
+
+/* ═══════════════════════════════════════
+   Footer — bottom corners must match popup radius
+   ═══════════════════════════════════════ */
+
+.wifi-menu .footer {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 12px;
+    color: var(--subtext);
+    background-color: var(--background2);
+    border-top: 1px solid var(--border);
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
+}
+
+.wifi-menu .footer .settings-button {
+    font-family: var(--system-font);
+    background-color: transparent;
+    border: none;
+    padding: 0 2px;
+    min-width: 26px;
+    min-height: 26px;
+    color: var(--text);
+}
+
+.wifi-menu .footer .settings-button:hover {
+    color: var(--accent);
+}
+
+/* Scan icon — Segoe Fluent Icons Refresh glyph.
+   qproperty-text overrides whatever the widget
+   was assigned by YASB. Fallback codepoints
+   listed in the notes below. */
+.wifi-menu .footer .refresh-icon {
+    font-family: 'Segoe Fluent Icons';
+    background-color: transparent;
+    border: none;
+    min-width: 26px;
+    min-height: 26px;
+    color: var(--text);
+}
+
+.wifi-menu .footer .refresh-icon:hover {
+    color: var(--accent);
+}
+
+.wifi-widget .widget-container .icon {
+    font-family: 'Segoe Fluent Icons';
+    font-size: 16px;
+    color: var(--text);
+}
+
+/* ═══════════════════════════════════════
+    GlazeWM Workspaces
    ═══════════════════════════════════════ */
 
 .glazewm-workspaces {
@@ -1938,7 +2385,7 @@ which is 16 pixels same as the other sections. */
 }
 
 /* ═══════════════════════════════════════
-   GlazeWM Tiling Direction
+    GlazeWM Tiling Direction
    ═══════════════════════════════════════ */
 
 .glazewm-tiling-direction {
@@ -1966,7 +2413,7 @@ which is 16 pixels same as the other sections. */
 }
 
 /* ═══════════════════════════════════════
-   GlazeWM Binding Mode (optional — only if you enable the widget)
+    GlazeWM Binding Mode (optional — only if you enable the widget)
    ═══════════════════════════════════════ */
 
 .glazewm-binding-mode {
