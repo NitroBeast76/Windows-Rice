@@ -1,4 +1,3 @@
-```markdown
 # Windows-Rice
 
 A Windows 10/11 rice you install once. GlazeWM, YASB, Starship, and a curated pile of CLI tools, deployed by a PowerShell script that knows how to say sorry.
