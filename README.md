@@ -1,5 +1,12 @@
 # Windows-Rice
 
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4?logo=windows&logoColor=white)](#requirements)
+[![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-5391FE?logo=powershell&logoColor=white)](#requirements)
+[![License](https://img.shields.io/badge/license-MIT-green)](#license)
+[![Themes](https://img.shields.io/badge/themes-5-cba6f7)](#themes)
+[![Starship](https://img.shields.io/badge/prompt-Starship-DD0B78?logo=starship&logoColor=white)](#what-you-actually-get)
+
+A Windows 10/11 rice you install once. ...
 A Windows 10/11 rice you install once. GlazeWM, YASB, Starship, and a curated pile of CLI tools, deployed by a PowerShell script that knows how to say sorry.
 
 **One command to install. One command to undo. Zero "well, actually, you'll need to manually edit the registry."**
