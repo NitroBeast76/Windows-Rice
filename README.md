@@ -19,16 +19,16 @@ cd Windows-Rice
 
 That's it. Really. If this README were a mile longer, you'd still only need those three lines.
 
-![Windows-Rice — tiled workspace with cava, btop, and Fastfetch](assets/screenshots/tiling.png)
+![Windows-Rice — tiled workspace with cava, btop, and Fastfetch](assets/screenshots/tiling.jpg)
 
 <details>
 <summary>More screenshots (click if you're on the fence)</summary>
 
-![Windows-Rice desktop — YASB bar and wallpaper](assets/screenshots/desktop.png)
+![Windows-Rice desktop — YASB bar and wallpaper](assets/screenshots/desktop.jpg)
 
-![Installer — package installation phase](assets/screenshots/installer-1.png)
+![Installer — package installation phase](assets/screenshots/installer-1.jpg)
 
-![Installer — completion summary](assets/screenshots/installer-2.png)
+![Installer — completion summary](assets/screenshots/installer-2.jpg)
 
 </details>
 
