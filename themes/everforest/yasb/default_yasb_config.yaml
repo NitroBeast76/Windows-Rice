@@ -61,6 +61,7 @@ bars:
       - notifications
       - language
       - control_center
+widgets:
   home:
     type: yasb.home.HomeWidget
     options:
