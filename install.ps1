@@ -114,6 +114,7 @@ $GlazeWmDir    = Join-Path $HomeDir '.glzr\glazewm'
 $CavaDir       = Join-Path $HomeDir '.config\cava'
 $FastfetchDir  = Join-Path $HomeDir '.config\fastfetch'
 $BtopDir       = Join-Path $HomeDir '.config\btop'
+$StarshipDir   = Join-Path $HomeDir '.config\starship'
 
 # ChronoTerm reads %APPDATA%\chronoterm\config.toml on first run. We resolve
 # %APPDATA% through the Windows API rather than $env:APPDATA so it stays
@@ -822,6 +823,7 @@ function Install-AllPackages {
         Install-WingetPackage -Id 'junegunn.fzf'              -Name 'fzf'               | Out-Null
         Install-WingetPackage -Id 'BurntSushi.ripgrep.MSVC'   -Name 'ripgrep'           | Out-Null
         Install-WingetPackage -Id 'yt-dlp.yt-dlp'             -Name 'yt-dlp'            | Out-Null
+        Install-WingetPackage -Id 'Starship.Starship'         -Name 'Starship'          | Out-Null
 
         # Yazi + supporting dependencies (winget).
         Install-WingetPackage -Id 'sxyazi.yazi'               -Name 'Yazi'              | Out-Null
@@ -1195,6 +1197,7 @@ function Deploy-AllConfigs {
         @{ Rel = 'powershell\Microsoft.PowerShell_profile.ps1'; Dest = $PwshProfilePath;                        Subdir = 'powershell';  Label = 'PowerShell profile' }
         @{ Rel = 'chronoterm\config.toml';               Dest = (Join-Path $ChronoTermDir 'config.toml');       Subdir = 'chronoterm';  Label = '%APPDATA%\chronoterm\config.toml' }
         @{ Rel = 'btop\btop.conf';                       Dest = (Join-Path $BtopDir      'btop.conf');          Subdir = 'btop';        Label = '~/.config/btop/btop.conf' }
+        @{ Rel = 'starship\starship.toml';               Dest = (Join-Path $StarshipDir  'starship.toml');      Subdir = 'starship';    Label = '~/.config/starship.toml' }
     )
     # ------------------------------------------------------------------
 
@@ -1803,7 +1806,8 @@ function Invoke-Verification {
         'glazewm',
         'yasb',
         'thide',
-        'chronoterm'
+        'chronoterm',
+        'starship'
     )
 
     foreach ($cmd in $commands) {
@@ -1925,7 +1929,8 @@ $requiredPaths = @(
     (Join-Path $ConfigRoot 'fastfetch\config.jsonc'),
     (Join-Path $ConfigRoot 'fastfetch\ascii.txt'),
     (Join-Path $ConfigRoot 'powershell\Microsoft.PowerShell_profile.ps1'),
-    (Join-Path $ConfigRoot 'terminal\settings.json')
+    (Join-Path $ConfigRoot 'terminal\settings.json'),
+    (Join-Path $ConfigRoot 'starship\starship.toml')
 )
 
 $missing = @($requiredPaths | Where-Object { -not (Test-Path -LiteralPath $_) })
