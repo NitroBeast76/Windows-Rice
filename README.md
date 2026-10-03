@@ -1,6 +1,7 @@
+```markdown
 # Windows-Rice
 
-A Windows 10/11 rice you install once. GlazeWM, YASB, and a curated pile of CLI tools, deployed by a PowerShell script that knows how to say sorry.
+A Windows 10/11 rice you install once. GlazeWM, YASB, Starship, and a curated pile of CLI tools, deployed by a PowerShell script that knows how to say sorry.
 
 **One command to install. One command to undo. Zero "well, actually, you'll need to manually edit the registry."**
 
@@ -24,6 +25,45 @@ That's it. Really. If this README were a mile longer, you'd still only need thos
 ![Installer — completion summary](assets/screenshots/installer-2.png)
 
 </details>
+
+---
+
+## Contents
+
+- [Why this exists](#why-this-exists)
+- [What you actually get](#what-you-actually-get)
+  - [Desktop / UI](#desktop--ui)
+  - [CLI tools](#cli-tools)
+  - [New in 1.3](#new-in-13)
+  - [Fonts](#fonts)
+  - [PowerShell](#powershell)
+- [Themes](#themes)
+  - [Switching themes](#switching-themes)
+  - [How themes actually work](#how-themes-actually-work)
+  - [Adding your own theme](#adding-your-own-theme)
+- [Repository structure](#repository-structure)
+- [Requirements](#requirements)
+- [Installation](#installation)
+  - [If Windows says "no"](#if-windows-says-no)
+  - [What the installer does](#what-the-installer-does)
+- [Installer options](#installer-options)
+  - [Examples that will actually help you](#examples-that-will-actually-help-you)
+  - [About `-SkipPackages`](#about--skippackages)
+- [After the install](#after-the-install)
+- [CLI tools cheat sheet](#cli-tools-cheat-sheet)
+- [Configuration locations](#configuration-locations)
+- [Startup chain](#startup-chain)
+- [Windows Terminal](#windows-terminal)
+- [Backups & Safety](#backups--safety)
+- [Installation manifest](#installation-manifest)
+- [Uninstallation](#uninstallation)
+- [Wallpapers](#wallpapers)
+- [Customization](#customization)
+- [Updating the rice](#updating-the-rice)
+- [Current limitations](#current-limitations)
+- [Design philosophy](#design-philosophy)
+- [Credits](#credits)
+- [License](#license)
 
 ---
 
@@ -51,6 +91,7 @@ It also has themes now, which means you can change how it looks without becoming
 | **GlazeWM** | Tiling window manager. Your windows will line up like they mean it. |
 | **YASB** | Status bar at the top. Shows time, music, CPU, and whether your RAM is as sad as your wallet. |
 | **CAVA** | Audio visualizer, embedded in the bar. Yes, it will pulse when the bass drops. |
+| **Starship** | The prompt. Rust binary, ~100ms to initialize, palette follows the active theme. |
 | **Fastfetch** | System info printed on shell start. Runs on every new terminal because vanity is a valid use case. |
 | **Windows Terminal** | The terminal host. Yes, the one Microsoft makes. No, we're not switching to Wezterm today. |
 | **PowerShell 7** | The shell. The one that actually works. |
@@ -60,6 +101,12 @@ It also has themes now, which means you can change how it looks without becoming
 `btop` (resource monitor), `fd` (`find` that isn't stuck in 1985), `fzf` (fuzzy finder), `ripgrep` (`grep` but it's fast enough to finish before you do), `yazi` (terminal file manager with previews), `yt-dlp` (the internet's favorite "save that video" tool), `ffmpeg`, `7-Zip`, `jq`, `zoxide`, `ImageMagick`.
 
 If you don't know what half of those do, install and find out. That's the fun part.
+
+### New in 1.3
+
+| Component | Role |
+|---|---|
+| **Starship** | The prompt. Rust binary, ~100ms init, palette is defined per-theme in `starship.toml`. Deployed as a single file at `~/.config/starship.toml` (Starship's own convention — not a folder). |
 
 ### New in 1.2
 
@@ -79,12 +126,15 @@ Other Nerd Fonts (Fira Code, Hack, Caskaydia Cove, Meslo, Victor Mono) live in t
 
 ### PowerShell
 
-The PowerShell profile is deliberately boring:
+The PowerShell profile is small and does three things:
 
 - Sets UTF-8 I/O encoding
 - Runs Fastfetch
+- Initializes Starship
 
-No prompt framework. No Oh My Posh. No Starship. No "but have you tried this custom prompt written in Rust that compiles on first launch." Fast, minimal, done.
+Starship is the prompt: a single Rust binary with sub-100ms startup cost, palette driven by the active theme. No Oh My Posh. No prompt framework that needs a compilation step. The profile stays short because Starship does the rendering, and Starship is fast enough that you won't notice it running.
+
+The Starship init line is guarded by a `Get-Command` check, so a `-SkipPackages` install on a machine without Starship yet won't throw on every shell open — it just falls back to the bare PowerShell prompt until you install Starship.
 
 ---
 
@@ -100,13 +150,15 @@ The rice ships with five themes. One is the base config, four are overrides.
 | `kanagawa` | Hokusai colors. Blue and gold. Elegant. |
 | `rose-pine` | Soft purples and pinks. The "it's 11 PM and I'm still coding" theme. |
 
+Each theme selects its own Starship palette from the shared `starship.toml`, so the prompt color changes along with everything else when you swap.
+
 ### Switching themes
 
 ```powershell
 .\install.ps1 -Theme kanagawa -SkipPackages -SkipFonts
 ```
 
-The `-SkipPackages -SkipFonts` tells the installer to skip the boring bits and just swap the config. Takes five seconds. Your terminal, YASB bar, Cava gradient, Fastfetch logo, wallpaper, and GlazeWM config all swap at once — GlazeWM gets told to reload itself, no manual keypress needed.
+The `-SkipPackages -SkipFonts` tells the installer to skip the boring bits and just swap the config. Takes five seconds. Your terminal, YASB bar, Cava gradient, Starship prompt, Fastfetch logo, wallpaper, and GlazeWM config all swap at once — GlazeWM gets told to reload itself, no manual keypress needed.
 
 ### How themes actually work
 
@@ -120,6 +172,7 @@ themes/kanagawa/
 ├── cava/config
 ├── fastfetch/config.jsonc
 ├── fastfetch/ascii.txt
+├── starship/starship.toml
 ├── terminal/settings.json
 ├── chronoterm/config.toml
 └── wallpapers/
@@ -164,6 +217,8 @@ Windows-Rice/
 │   │   └── config.toml
 │   ├── powershell/
 │   │   └── Microsoft.PowerShell_profile.ps1
+│   ├── starship/
+│   │   └── starship.toml
 │   └── terminal/
 │       └── settings.json
 ├── themes/                      # override themes
@@ -380,6 +435,7 @@ None of these require configuration. They work from any shell once PATH is refre
 | `thide` | Hide/show taskbar | `thide hide` / `thide show` |
 | `chronoterm` | Clock in your terminal | `chronoterm` |
 | `cmatrix` | Falling code | `cmatrix` |
+| `starship` | The prompt | (runs on every prompt) |
 
 ### A few that change how you work
 
@@ -428,9 +484,12 @@ Everything deploys under your home directory. The installer resolves `~` from `$
 | `configs/btop/btop.conf` | `~/.config/btop/btop.conf` |
 | `configs/chronoterm/config.toml` | `%APPDATA%\chronoterm\config.toml` |
 | `configs/powershell/Microsoft.PowerShell_profile.ps1` | `~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1` |
+| `configs/starship/starship.toml` | `~/.config/starship.toml` |
 | `configs/terminal/settings.json` | Merged into Windows Terminal's user `settings.json` |
 | `assets/wallpapers/**` | `~/Pictures/Windows-Rice/**` |
 | Backups and manifest | `~/.windows-rice-backup/` |
+
+**Starship uses one file, not a folder.** `~/.config/starship.toml` is Starship's documented default location. The repo stores it at `configs/starship/starship.toml` for symmetry with every other component; only the destination differs.
 
 **Fastfetch uses one location:** `~/.config/fastfetch/`. Not two, not three. Not `%APPDATA%`. One.
 
@@ -509,6 +568,7 @@ Backups live under `~/.windows-rice-backup/`, in a layout that mirrors the compo
 ├── btop/
 ├── chronoterm/
 ├── powershell/
+├── starship/
 ├── terminal/
 └── wallpapers/
 ```
@@ -631,10 +691,13 @@ Edit files under `configs/`, rerun `install.ps1`, done. That's the workflow.
 | `configs/btop/btop.conf` | btop settings |
 | `configs/chronoterm/config.toml` | ChronoTerm clock |
 | `configs/powershell/Microsoft.PowerShell_profile.ps1` | Shell startup |
+| `configs/starship/starship.toml` | Starship prompt format and palettes |
 | `configs/terminal/settings.json` | Rice-owned Terminal settings |
 | `themes/<name>/` | Per-theme overrides of any of the above |
 
 **YASB live-reloads.** `watch_stylesheet: true` and `watch_config: true` mean edits to the YASB YAML and CSS take effect without restarting the bar. Everything else needs a rerun of the installer or a manual reload.
+
+**Starship live-reloads too** — well, the next prompt after you save the file. No restart needed.
 
 **Deployed files are not synced back.** If you edit `~/.config/yasb/config.yaml` directly, then rerun the installer, your edits get backed up and replaced. To keep changes, edit the files under `configs/` and re-run.
 
@@ -658,6 +721,17 @@ For a fast "I just want the latest configs":
 
 That pulls, redeploys configs, redeploys wallpapers, merges WT, and skips all the package-checking work. Takes seconds.
 
+**A note on `-Update` and new packages.** When `-Update` pulls a commit that adds a new package to the install list, that package will **not** be installed in the same run. The reason is that the script already loaded into memory is the old version — `git pull` updates the file on disk, but the running process keeps executing the code it started with.
+
+Two-step fix:
+
+```powershell
+.\install.ps1 -Update    # pulls new code, deploys configs
+.\install.ps1            # now running the new version — installs any new packages
+```
+
+Or just run `.\install.ps1` twice whenever you see a changelog entry that mentions a new package. It's the standard "self-updating script" problem, and there's no clean fix that doesn't involve re-launching yourself mid-run.
+
 ---
 
 ## Current limitations
@@ -673,6 +747,8 @@ That pulls, redeploys configs, redeploys wallpapers, merges WT, and skips all th
 **PowerShell 5.1 execution policy.** Windows ships with a policy that blocks scripts. If `.\install.ps1` fails with `UnauthorizedAccess`, use `PowerShell -ExecutionPolicy Bypass -File .\install.ps1` or set `RemoteSigned` for the current user.
 
 **Flow Launcher and Windhawk don't install CLI shims.** Launch from the Start Menu. Yes, this is slightly annoying. No, we can't fix it without hacking the installer for those specific tools.
+
+**`-Update` doesn't install new packages in the same run.** See the note in [Updating the rice](#updating-the-rice). Run the installer a second time after pulling.
 
 ---
 
@@ -701,6 +777,7 @@ Windows-Rice configures software made by other people. Upstream projects include
 - **GlazeWM** — tiling window manager for Windows
 - **YASB** — status bar
 - **CAVA** — audio visualizer
+- **Starship** — cross-shell prompt, written in Rust
 - **Fastfetch** — system information
 - **Windows Terminal**, **PowerShell** — Microsoft
 - **btop**, **fd**, **fzf**, **ripgrep**, **yazi**, **yt-dlp**, **FFmpeg**, **7-Zip**, **jq**, **zoxide**, **ImageMagick** — the CLI power tools that make a shell worth using
@@ -716,6 +793,6 @@ Upstream URLs are intentionally omitted here until they're verified for this rep
 
 Windows-Rice is released under the MIT License. See [`LICENSE`](LICENSE) for the full text.
 
-The MIT License covers the PowerShell scripts, YAML/CSS/JSON configuration files, and other original content in this repository. It does not relicense third-party software that Windows-Rice installs or configures, nor the color palettes, fonts, or ASCII art sourced from other projects — those remain under their own licenses and are acknowledged in [Credits](#credits) above.
+The MIT License covers the PowerShell scripts, YAML/CSS/JSON/TOML configuration files, and other original content in this repository. It does not relicense third-party software that Windows-Rice installs or configures, nor the color palettes, fonts, or ASCII art sourced from other projects — those remain under their own licenses and are acknowledged in [Credits](#credits) above.
 
 If you fork this, remix it, and ship something cool, you don't have to credit us. But it would be nice if you did.
