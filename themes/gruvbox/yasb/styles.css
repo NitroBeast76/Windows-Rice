@@ -209,9 +209,9 @@
 
 /* Bar */
 .yasb-bar {
-    background-color: var(--background);
+    background-color: #192319;
     padding: 0px 14px;
-    border-top: 1px solid var(--border);
+    border-bottom: 1px solid #3A4A3A;
 }
 
 /* Tooltip */
