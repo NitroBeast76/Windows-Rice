@@ -1741,6 +1741,23 @@ function Ensure-PSReadLine {
 # ==================================================== UPDATE
 
 function Invoke-RepoUpdate {
+    <#
+        Bring the local checkout up to date with origin/main.
+
+        Uses fetch + explicit merge --ff-only instead of `git pull`, because:
+
+            - `git pull` creates a merge commit when the local branch has
+            diverged from the remote, and creating a commit requires a
+            configured git identity. Fresh Windows installs have none,
+            so the pull fails with "Committer identity unknown".
+            - `git fetch` + `git merge --ff-only` never creates a commit on a
+            clean fast-forward. No identity needed.
+
+        If the local branch has diverged from origin (for example, because
+        the remote history was rewritten to purge large binary files), the
+        installer offers to reset the local branch to match origin. That
+        discards local commits and uncommitted changes, so it prompts first.
+    #>
     Write-Section 'Update'
 
     if (-not (Test-CommandExists 'git')) {
@@ -1757,37 +1774,120 @@ function Invoke-RepoUpdate {
     }
 
     if ($DryRun) {
-        Write-Skip "would run: git -C `"$RepoRoot`" pull --ff-only"
+        Write-Skip 'would fetch origin and reconcile the local branch'
         return
     }
 
-    Write-Info "pulling latest from origin..."
-    try {
-        $out = (& git -C $RepoRoot pull --ff-only 2>&1 | Out-String)
-    } catch {
-        Write-FailLine "git pull failed: $_"
-        Add-Summary 'Failed' "Update ($_)"
-        return
-    }
-
+    # ------------------------------------------------------------------
+    # Step 1: fetch. Read-only with respect to the working tree, so it is
+    # always safe to run first. Needs no identity.
+    # ------------------------------------------------------------------
+    Write-Info 'fetching from origin...'
+    $fetchOut = (& git -C $RepoRoot fetch origin 2>&1 | Out-String)
     if ($LASTEXITCODE -ne 0) {
-        Write-WarnLine "git pull exited $LASTEXITCODE."
-        if ($out) {
-            foreach ($line in ($out -split "`r?`n" | Where-Object { $_ -ne '' })) {
-                Write-Host "        $line" -ForegroundColor DarkGray
-            }
+        Write-WarnLine "git fetch exited $LASTEXITCODE."
+        foreach ($line in ($fetchOut -split "`r?`n" | Where-Object { $_ -ne '' })) {
+            Write-Host "        $line" -ForegroundColor DarkGray
         }
-        Write-WarnLine 'If the working tree has local changes, commit or stash them first.'
-        Add-Summary 'Warnings' 'Update (git pull failed)'
+        Add-Summary 'Warnings' 'Update (git fetch failed)'
         return
     }
 
-    if ($out -match 'Already up[ -]to[ -]date') {
+    # ------------------------------------------------------------------
+    # Step 2: inspect state. HEAD vs origin/main.
+    # ------------------------------------------------------------------
+    $localHead  = (& git -C $RepoRoot rev-parse HEAD 2>$null | Out-String).Trim()
+    $remoteHead = (& git -C $RepoRoot rev-parse origin/main 2>$null | Out-String).Trim()
+
+    if ($localHead -eq $remoteHead) {
         Write-Skip 'Already up to date'
         Add-Summary 'AlreadyInstalled' 'Repository update'
+        return
+    }
+
+    & git -C $RepoRoot merge-base --is-ancestor HEAD origin/main 2>$null
+    $localIsBehind = ($LASTEXITCODE -eq 0)
+
+    & git -C $RepoRoot merge-base --is-ancestor origin/main HEAD 2>$null
+    $localIsAhead = ($LASTEXITCODE -eq 0)
+
+    # ------------------------------------------------------------------
+    # Case 1: local is strictly behind. Fast-forward. No commit created.
+    # ------------------------------------------------------------------
+    if ($localIsBehind -and -not $localIsAhead) {
+        Write-Info 'local is behind origin — fast-forwarding...'
+        & git -C $RepoRoot merge --ff-only origin/main 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Ok 'Repository updated'
+            Add-Summary 'Installed' 'Repository update'
+        } else {
+            Write-WarnLine "Fast-forward exited $LASTEXITCODE."
+            Add-Summary 'Warnings' 'Update (fast-forward failed)'
+        }
+        return
+    }
+
+    # ------------------------------------------------------------------
+    # Case 2: local is ahead. Nothing to pull — the remote is behind.
+    # ------------------------------------------------------------------
+    if ($localIsAhead -and -not $localIsBehind) {
+        Write-Skip 'Local branch is ahead of origin — nothing to pull'
+        Add-Summary 'AlreadyInstalled' 'Repository update (local ahead)'
+        return
+    }
+
+    # ------------------------------------------------------------------
+    # Case 3: neither is an ancestor of the other. Two sub-cases:
+    #   - histories share a merge base  => genuinely diverged (local commits)
+    #   - no merge base                 => unrelated (remote was rewritten)
+    # ------------------------------------------------------------------
+    $mergeBase = (& git -C $RepoRoot merge-base HEAD origin/main 2>$null | Out-String).Trim()
+
+    if (-not $mergeBase) {
+        Write-WarnLine 'Local branch and origin/main have no common history.'
+        Write-WarnLine 'This usually means the remote history was rewritten'
+        Write-WarnLine '(for example, to purge large binary files from old commits).'
     } else {
-        Write-Ok 'Repository updated'
-        Add-Summary 'Installed' 'Repository update'
+        Write-WarnLine 'Local branch and origin/main have diverged.'
+        Write-WarnLine 'This means you have local commits that are not on the remote.'
+    }
+
+    # Show what a reset would discard (tracked changes only; untracked files
+    # survive a `git reset --hard` and are not shown).
+    $status = (& git -C $RepoRoot status --porcelain 2>$null | Out-String).Trim()
+    $trackedChanges = @($status -split "`r?`n" | Where-Object { $_ -ne '' -and $_ -notmatch '^\?\?' })
+
+    if ($trackedChanges.Count -gt 0) {
+        Write-Host ''
+        Write-WarnLine 'You also have uncommitted changes to tracked files:'
+        $shown = $trackedChanges | Select-Object -First 5
+        foreach ($line in $shown) {
+            Write-Host "        $line" -ForegroundColor DarkGray
+        }
+        if ($trackedChanges.Count -gt 5) {
+            Write-Host "        ... and $($trackedChanges.Count - 5) more" -ForegroundColor DarkGray
+        }
+    }
+
+    Write-Host ''
+    Write-Host '  The installer can reset your local branch to match origin/main.' -ForegroundColor Gray
+    Write-Host '  This discards local commits and any uncommitted changes.' -ForegroundColor Gray
+    Write-Host '  If you want to keep them, abort and resolve manually.' -ForegroundColor Gray
+    Write-Host ''
+
+    if (-not (Confirm-Action -Prompt 'Reset local branch to origin/main? Local commits and changes will be lost.' -Default $false)) {
+        Write-Skip 'Update aborted. Repository unchanged.'
+        Add-Summary 'Skipped' 'Update (diverged — user declined reset)'
+        return
+    }
+
+    & git -C $RepoRoot reset --hard origin/main 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        Write-Ok 'Repository reset to origin/main'
+        Add-Summary 'Installed' 'Repository update (reset)'
+    } else {
+        Write-FailLine "git reset --hard exited $LASTEXITCODE"
+        Add-Summary 'Failed' 'Update (reset failed)'
     }
 }
 
