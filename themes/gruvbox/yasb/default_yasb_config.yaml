@@ -2,6 +2,7 @@
 # For more information, visit https://github.com/amnweb/yasb/wiki
 watch_stylesheet: true
 watch_config: true
+system_colors: true
 debug: false
 update_check: true
 bars:
@@ -34,9 +35,9 @@ bars:
       left:
       - home
       - lines
-      - glazewm_tiling_direction   # was komorebi_active_layout
+      - glazewm_tiling_direction
       - lines
-      - glazewm_workspaces          # was komorebi_workspaces
+      - glazewm_workspaces
       - lines
       - taskbar
       center:
@@ -74,6 +75,8 @@ widgets:
         path: ~\Documents
       - title: Pictures
         path: ~\Pictures
+      - title: Wallpapers
+        path: ~/Pictures/Windows-Rice
       system_menu: true
       power_menu: false
       blur: false
@@ -106,11 +109,11 @@ widgets:
       label_alt: "{level}"
       tooltip: true
       icons:
-        "muted": "\uf026" # Icon for muted
-        "10": "\uf026"  # Icon for 0-10% volume
-        "30": "\uf026"  # Icon for 11-30% volume
-        "60": "\uf026"  # Icon for 31-60% volume
-        "100": "\uf026" # Icon for 61-100% volume
+        "muted": "\uf026"
+        "10": "\uf026"
+        "30": "\uf026"
+        "60": "\uf026"
+        "100": "\uf026"
       callbacks:
         on_left: toggle_volume_menu
         on_right: toggle_mute
@@ -189,80 +192,22 @@ widgets:
       max_length_ellipsis: '...'
       monitor_exclusive: false
   win_button:
-      type: "yasb.custom.CustomWidget"
-      options:
-        label: "家"
-        label_alt: "家"
-        class_name: "system-widget"
-        callbacks:
-          on_left: "exec start_menu"
-  komorebi_workspaces:
-    type: "komorebi.workspaces.WorkspaceWidget"
+    type: "yasb.custom.CustomWidget"
     options:
-      label_offline: "Komorebi Offline"
-      label_workspace_btn: "{index}"
-      label_workspace_active_btn: "{index}"
-      label_workspace_populated_btn: "{index}"
-      label_default_name: ""
-      label_zero_index: false
-      hide_empty_workspaces: true
-      hide_if_offline: false
-      toggle_workspace_layer:
-        enabled: false
-        tiling_label: "Tiling"
-        floating_label: "Floating"
-      app_icons: 
-        enabled_populated: false
-        enabled_active: false
-        size: 12
-        max_icons: 0
-        hide_label: false
-        hide_duplicates: false
-        hide_floating: false
-  komorebi_active_layout:
-    type: "komorebi.active_layout.ActiveLayoutWidget"
-    options:
-      hide_if_offline: true
-      label: "{layout_name}"
-      layouts: ['bsp', 'columns', 'rows', 'grid', 'vertical_stack', 'horizontal_stack', 'ultrawide_vertical_stack','right_main_vertical_stack']
-      layout_icons:
-        bsp: "\uebeb"
-        columns: "\uebf7"
-        rows: "\uec01"
-        grid: "\udb81\udf58"
-        scrolling: "\uebf7"
-        vertical_stack: "\uebee"
-        horizontal_stack: "\uebf0"
-        ultrawide_vertical_stack: "\uebee"
-        right_main_vertical_stack: "\uebf1"
-        monocle: "\uf06f"
-        maximized: "\uf06f"
-        floating: "\uf2d2"
-        paused: "\udb83\udf89"
-        tiling: "\udb81\ude40"
+      label: "♪"
+      label_alt: "♪"
+      class_name: "system-widget"
       callbacks:
-        on_left: 'toggle_layout_menu'
-        on_middle: 'next_layout'
-        on_right: 'prev_layout'
-      layout_menu:
-        blur: false
-        round_corners: true
-        round_corners_type: "normal"
-        border_color: "System"
-        alignment: "left"
-        direction: "up"
-        offset_top: 6
-        offset_left: 0
-        show_layout_icons: true
+        on_left: "exec start_menu"
   systray:
     type: "yasb.systray.SystrayWidget"
     options:
       class_name: "systray"
       label_collapsed: "\uf106"
       label_expanded: "\uf107"
-      label_position: "left" # Can be "left" or "right"
-      icon_size: 16 # Can be any integer between 8 and 64
-      pin_click_modifier: "alt" # Can be "ctrl", "alt" or "shift"
+      label_position: "left"
+      icon_size: 16
+      pin_click_modifier: "alt"
       show_unpinned: false
       show_unpinned_button: true
       show_battery: false
@@ -271,7 +216,7 @@ widgets:
       use_hook: true
       icons_per_row: 3
       show_network: false
-      hide_icons: [] # Optional, list of process names to hide (e.g. ["discord"])
+      hide_icons: []
       popup:
         blur: false
         round_corners: true
@@ -286,16 +231,15 @@ widgets:
     options:
       label: "<span>\udb83\ude09</span>"
       change_automatically: false
-    # Example path to folder with images. Can be a single string or a list of strings.
-      image_path: "D:\\OneDrive\\Pictures\\Wallpapers\\Themes\\Monochrome" 
+      image_path: "~/Pictures/Windows-Rice"
       engine:
         enabled: true
-        animation: "split" # circle/slide_top/diamond/split
+        animation: "split"
       gallery:
         image_width: 520
         image_corner_radius: 0
-        type: "strip" # default/magnified/strip/slide - see "Gallery types" below
-        orientation: "landscape" # landscape/portrait
+        type: "strip"
+        orientation: "landscape"
         accent_color: "auto"
       callbacks:
         on_left: "toggle_gallery"
@@ -304,7 +248,7 @@ widgets:
       keybindings:
         - keys: "ctrl+alt+w"
           action: "toggle_gallery"
-          screen: "primary" # active/cursor/primary
+          screen: "primary"
   media:
     type: "yasb.media.MediaWidget"
     options:
@@ -353,17 +297,16 @@ widgets:
       scrolling_label:
         enabled: false
         update_interval_ms: 33
-        style: "left"  # can be "left", "right", "bounce", "bounce-ease"
+        style: "left"
         separator: " | "
         label_padding: 0
         always_scroll: false
-      # Easing curve params: https://www.desmos.com/calculator/j7eamemxzi
         ease_slope: 20
         ease_pos: 0.8
         ease_min: 0.5
       progress_bar:
-        enabled: false       # Whether to enable the progress bar on the widget.
-        alignment: "bottom"  # The alignment of the progress bar inside the widget container. Can be "top", "bottom", or "center".
+        enabled: false
+        alignment: "bottom"
   language:
     type: "yasb.language.LanguageWidget"
     options:
@@ -452,15 +395,15 @@ widgets:
         medium: 50
         high: 90
       histogram_icons:
-        - "\u2581" # 0%
-        - "\u2581" # 10%
-        - "\u2582" # 20%
-        - "\u2583" # 30%
-        - "\u2584" # 40%
-        - "\u2585" # 50%
-        - "\u2586" # 60%
-        - "\u2587" # 70%
-        - "\u2588" # 80%+
+        - "\u2581"
+        - "\u2581"
+        - "\u2582"
+        - "\u2583"
+        - "\u2584"
+        - "\u2585"
+        - "\u2586"
+        - "\u2587"
+        - "\u2588"
       histogram_num_columns: 8
       callbacks:
         on_left: "toggle_label"
@@ -488,15 +431,15 @@ widgets:
         medium: 50
         high: 90
       histogram_icons:
-        - "\u2581" # 0%
-        - "\u2581" # 10%
-        - "\u2582" # 20%
-        - "\u2583" # 30%
-        - "\u2584" # 40%
-        - "\u2585" # 50%
-        - "\u2586" # 60%
-        - "\u2587" # 70%
-        - "\u2588" # 80%+
+        - "\u2581"
+        - "\u2581"
+        - "\u2582"
+        - "\u2583"
+        - "\u2584"
+        - "\u2585"
+        - "\u2586"
+        - "\u2587"
+        - "\u2588"
       menu:
         enabled: true
         direction: "up"

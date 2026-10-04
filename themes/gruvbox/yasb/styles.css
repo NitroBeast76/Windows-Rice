@@ -40,7 +40,7 @@
     --border: #414559;
     --redFlash: #e78284;
     --subtext: #a5adce; */
-    
+
     /* Catppuccin Macchiato */
     /* --background: #24273a;
     --background2: #363a4f;
@@ -89,7 +89,7 @@
     --redFlash: #657C9F;
     --subtext: #a5adcb; */
 
-   /* Sousou no Frieren */
+    /* Sousou no Frieren */
     /* --background: #d4ddd0;
     --background2: #A1B99C;
     --accent: #6d9471;
@@ -114,7 +114,7 @@
     --subtext: #9AA79D; */
 
     /* Monochrome */
-    /*--background: #18181b;
+    /* --background: #18181b;
     --background2: #3f3f42;
     --accent: #b2b2b2;
     --text: #e5e7eb;
@@ -164,26 +164,26 @@
     /* Nord */
     /* --background: #2e3440;
     --background2: #434c5e;
-    --accent: #4c566a;
-    --text: #d8dee9;
-    --accentText: #d8dee9;
-    --hover: #4c566a;
-    --mutedBG: #3b4252;
-    --border: #434c5e;
-    --redFlash: #bf616a;
-    --subtext: #bdc2cd76; */
+    --accent: #88C0D0;
+    --text: #ECEFF4;
+    --accentText: #2E3440;
+    --hover: #4C566A;
+    --mutedBG: #3B4252;
+    --border: #566174;
+    --redFlash: #BF616A;
+    --subtext: #D8DEE9; */
 
     /* Kanagawa */
     /* --background: #1F1F28;
-    --background2: #727169;
-    --accent: #C8C093;
+    --background2: #2A2A37;
+    --accent: #7E9CD8;
     --text: #DCD7BA;
     --accentText: #1F1F28;
-    --hover: #76946A;
-    --mutedBG: #090618;
-    --border: #C0A36E;
+    --hover: #363646;
+    --mutedBG: #181820;
+    --border: #54546D;
     --redFlash: #C34043;
-    --subtext: #C8C093; */
+    --subtext: #938AA9; */
 
     /* Gruvbox */
     --background: #282828;
@@ -352,12 +352,11 @@
 .home-menu .menu-item:hover {
     background-color: var(--hover);
     color: var(--text);
-    /* border: 1px solid var(--border); */
     border-radius: var(--border-radius2);
-    margin-left: 15px;
-    margin-right: 1px;
-    margin-top: 1px;
-    margin-bottom: 1px;
+    margin-left: 17px;
+    margin-right: 3px;
+    margin-top: 3px;
+    margin-bottom: 3px;
 }
 .home-menu .separator {
     max-height: 0px;
@@ -630,7 +629,6 @@
     padding: 8px 16px;
     margin: 2px;
     background-color: var(--background2);
-    /* border: 1px solid var(--border); */
     color: var(--background2);
     border-radius: var(--border-radius2);
 }
@@ -748,29 +746,24 @@
     color: var(--text);
 }
 
-/* Komorebi Workspaces */
-/*Style for widget.*/
+/* Komorebi Workspaces (dead code — kept for reference) */
 .komorebi-workspaces {
     padding-left: 0px;
     padding-right: 0px;
 }
 
-/*Style for widget container.*/
 .komorebi-workspaces .widget-container {
 }
 
-/*Style for buttons.*/
 .komorebi-workspaces .ws-btn {
     padding: 4px 16px;
     border: none;
 }
 
-/*Style for buttons which contain window and are not empty.*/
 .komorebi-workspaces .ws-btn.populated {
     padding: 4px 10px;
 } 
 
-/*Style for the active workspace button.*/
 .komorebi-workspaces .ws-btn.active {
     padding: 4px 16px;
     padding-left: 10;
@@ -782,7 +775,7 @@
 } 
 
 
-/* Komorebi-active-layout */
+/* Komorebi-active-layout (dead code) */
 .komorebi-active-layout {}
 .komorebi-active-layout .widget-container {}
 .komorebi-active-layout .label {
@@ -790,7 +783,7 @@
     padding-bottom: 1px;
 }
 
-/* Komorebi-layout-menu */
+/* Komorebi-layout-menu (dead code) */
 .komorebi-layout-menu {
     background-color: var(--background);
     border-radius: var(--border-radius);
@@ -851,8 +844,6 @@
 .systray {
     background: var(--background);
 }
-
-/* Icon being dragged, we already apply some transparency to it so you don't need to use it */
 
 .systray .pinned-container.drop-target {
     background: var(--background);
@@ -1488,7 +1479,7 @@ Example: "Windows Media" becomes "windows-media" */
 }
 
 /* Grouper sysInfo*/
-.systeminfo-grouper .container { /* The name of the css class is the name given in the config */
+.systeminfo-grouper .container {
     background-color: transparent;
 }
 
@@ -1517,16 +1508,12 @@ Example: "Windows Media" becomes "windows-media" */
     border-radius: var(--border-radius);
 }
 
-/* SECTIONS */
-/* Left and right padding of 12 px + 4 px margin for quick action and power plan, 
-which is 16 pixels same as the other sections. */
 .control-center-menu .section {
     background: transparent;
     margin: 0;
     padding: 16px 12px;
     border: none;
 }
-/* We dont want a padding at the bottom of the first section. */
 .control-center-menu .section.system-controls {
     padding: 12px 16px 0 16px;
 }
@@ -1534,7 +1521,6 @@ which is 16 pixels same as the other sections. */
     padding: 16px;
 }
 
-/* SHARED SEGOE FLUENT ICONS */
 .control-center-menu .section.system-controls .button,
 .control-center-menu .section.quick-actions .button .icon,
 .control-center-menu .section.sliders .slider .icon,
@@ -1546,7 +1532,6 @@ which is 16 pixels same as the other sections. */
     font-weight: 400;
 }
 
-/* SHARED HOVER & TRANSITION TRANSITIONS */
 .control-center-menu .section.quick-actions .button .icon,
 .control-center-menu .section.system-controls .button,
 .control-center-menu .section.sliders .slider .source-selector,
@@ -1557,7 +1542,6 @@ which is 16 pixels same as the other sections. */
     opacity: 1;
 }
 
-/* SHARED CLICKED / PRESSED STATES */
 .control-center-menu .section.system-controls .button:clicked,
 .control-center-menu .section.system-controls .button:pressed,
 .control-center-menu .section.quick-actions .button .icon:clicked,
@@ -1573,7 +1557,6 @@ which is 16 pixels same as the other sections. */
     opacity: 0.5;
 }
 
-/* SHARED DISABLED STATES */
 .control-center-menu .section.quick-actions .button.disabled .title,
 .control-center-menu .section.quick-actions .button.disabled .icon,
 .control-center-menu .section.sliders .slider.disabled,
@@ -1582,7 +1565,6 @@ which is 16 pixels same as the other sections. */
     opacity: 0.5;
 }
 
-/* SYSTEM CONTROLS */
 .control-center-menu .section.system-controls .button {
     background-color: var(--accent);
     border-radius: 16px;
@@ -1604,7 +1586,6 @@ which is 16 pixels same as the other sections. */
     background-color: var(--redFlash);
 }
 
-/* QUICK ACTIONS */
 .control-center-menu .section.quick-actions .button {
     margin: 0 4px;
     cursor: pointer;
@@ -1641,7 +1622,6 @@ which is 16 pixels same as the other sections. */
     color: var(--text);
 }
 
-/* SLIDERS */
 .control-center-menu .section.sliders .slider {
     background: transparent;
     border: none;
@@ -1672,7 +1652,6 @@ which is 16 pixels same as the other sections. */
     background-color: var(--hover);
 }
 
-/* POWER PLAN & POWER MODE */
 .control-center-menu .section.power .plan-name,
 .control-center-menu .section.power .mode-name {
     background: var(--accent);
@@ -1729,7 +1708,6 @@ which is 16 pixels same as the other sections. */
     font-size: var(--iconSize);
 }
 
-/* MEDIA CONTROLS */
 .control-center-menu .section.media {
     background-color: transparent;
     padding: 12px;
@@ -1784,7 +1762,6 @@ which is 16 pixels same as the other sections. */
     background-color: var(--background2);
 }
 
-/* Context menu styles for dropdowns and menus inside the Control Center panel */
 .control-center-menu .context-menu {
     background-color: var(--background);
     padding: 4px 0px;
@@ -2257,19 +2234,17 @@ which is 16 pixels same as the other sections. */
 }
 
 .glazewm-workspaces .ws-btn {
-    padding: 4px 10px;
+    padding: 4px 16px;
     margin: 0 2px;
     border: none;
-    border-radius: var(--border-radius2);
     background-color: transparent;
     color: var(--text);
     font-family: var(--system-font);
     font-weight: var(--fontWeight);
-    transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .glazewm-workspaces .ws-btn.empty {
-    color: var(--subtext);
+    color: var(--text);
     background-color: transparent;
 }
 
@@ -2279,7 +2254,8 @@ which is 16 pixels same as the other sections. */
 }
 
 .glazewm-workspaces .ws-btn.populated {
-    background-color: var(--background2);
+    padding: 4px 10px;
+    background-color: transparent;
     color: var(--text);
 }
 
@@ -2291,15 +2267,18 @@ which is 16 pixels same as the other sections. */
 .glazewm-workspaces .ws-btn.active_populated,
 .glazewm-workspaces .ws-btn.active_empty,
 .glazewm-workspaces .ws-btn.active {
-    background-color: var(--accent);
-    color: var(--accentText);
+    padding: 4px 10px;
+    background-color: var(--background);
+    border-radius: var(--border-radius2);
+    border-bottom: 1px solid var(--text);
+    color: var(--text);
 }
 
 .glazewm-workspaces .ws-btn.active_populated:hover,
 .glazewm-workspaces .ws-btn.active_empty:hover,
 .glazewm-workspaces .ws-btn.active:hover {
-    background-color: var(--accent);
-    color: var(--accentText);
+    background-color: var(--background);
+    color: var(--text);
 }
 
 .glazewm-workspaces .offline-status {
@@ -2330,7 +2309,6 @@ which is 16 pixels same as the other sections. */
     color: var(--text);
     font-family: var(--icons-font);
     font-size: var(--iconSize);
-    transition: color 0.15s ease;
 }
 
 .glazewm-tiling-direction .btn:hover {
