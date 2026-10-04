@@ -1,0 +1,15 @@
+[colors]
+enabled = true
+hours   = "#7AA2F7"   # Primary (blue) — identity anchor
+minutes = "#BB9AF7"   # Secondary (purple) — supporting cool balance
+seconds = "#7DCFFF"   # Cyan — tertiary segment, distinct but soft
+separator = "#3B4261" # Border — structural, not decorative
+date = "#C0CAF5"      # Text — primary readable info
+day = "#7DCFFF"       # Accent (cyan) — emphasis on the weekday
+ampm = "#A9B1D6"      # Text Muted — metadata
+timezone = "#A9B1D6"  # Text Muted — metadata
+border = "#3B4261"    # Border
+title = "#7DCFFF"     # Accent — label emphasis
+background = "#1A1B26" # Background — deep indigo canvas
+late_night_hours = "#565F89" # Text Subtle — dimmed, low energy
+hour_palette = []

@@ -1,0 +1,15 @@
+[colors]
+enabled = true
+hours   = "#88C0D0"   # Primary (Frost cyan) — identity anchor
+minutes = "#81A1C1"   # Secondary (Frost blue) — supporting cool balance
+seconds = "#8FBCBB"   # Nord7 (Frost teal) — tertiary, distinct from primary
+separator = "#566174" # Border (derived) — structural, not decorative
+date = "#ECEFF4"      # Text (Snow Storm) — primary readable info
+day = "#D08770"       # Accent (Aurora orange) — weekday emphasis
+ampm = "#D8DEE9"      # Text Muted (Snow Storm) — metadata
+timezone = "#D8DEE9"  # Text Muted — metadata
+border = "#566174"    # Border (derived)
+title = "#D08770"     # Accent — label emphasis
+background = "#2E3440" # Background (Polar Night) — base canvas
+late_night_hours = "#6E7D96" # Text Subtle (derived) — dimmed, low energy
+hour_palette = []
