@@ -3,10 +3,9 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4?logo=windows&logoColor=white)](#requirements)
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-5391FE?logo=powershell&logoColor=white)](#requirements)
 [![License](https://img.shields.io/badge/license-MIT-green)](#license)
-[![Themes](https://img.shields.io/badge/themes-5-cba6f7)](#themes)
+[![Themes](https://img.shields.io/badge/themes-10-cba6f7)](#themes)
 [![Starship](https://img.shields.io/badge/prompt-Starship-DD0B78?logo=starship&logoColor=white)](#what-you-actually-get)
 
-A Windows 10/11 rice you install once. ...
 A Windows 10/11 rice you install once. GlazeWM, YASB, Starship, and a curated pile of CLI tools, deployed by a PowerShell script that knows how to say sorry.
 
 **One command to install. One command to undo. Zero "well, actually, you'll need to manually edit the registry."**
@@ -146,15 +145,20 @@ The Starship init line is guarded by a `Get-Command` check, so a `-SkipPackages`
 
 ## Themes
 
-The rice ships with five themes. One is the base config, four are overrides.
+The rice ships with ten themes. One is the base config, nine are overrides.
 
 | Theme | Notes |
 |---|---|
 | `mocha` | The default. Catppuccin Mocha. Lives in `configs/`, not in `themes/`. Yes, we know that's inconsistent. It works. |
+| `ayu-dark` | Deep navy with a warm orange accent. Lean — one wallpaper. |
+| `dracula` | Purple and pink on near-black. The palette with a cult following. |
 | `everforest` | Muted greens. Feels like a cabin. |
-| `monochrome` | Black and white. Semantic colors collapse into each other. On purpose. Aesthetic. |
+| `gruvbox` | Retro warm browns and oranges. The one true terminal aesthetic. |
 | `kanagawa` | Hokusai colors. Blue and gold. Elegant. |
+| `monochrome` | Black and white. Semantic colors collapse into each other. On purpose. Aesthetic. |
+| `nord` | Cool arctic blues and greys. Cold, but in a good way. |
 | `rose-pine` | Soft purples and pinks. The "it's 11 PM and I'm still coding" theme. |
+| `tokyo-night` | Neon Tokyo. Blue-purple with cyan highlights. |
 
 Each theme selects its own Starship palette from the shared `starship.toml`, so the prompt color changes along with everything else when you swap.
 
@@ -182,7 +186,7 @@ themes/kanagawa/
 ├── terminal/settings.json
 ├── chronoterm/config.toml
 └── wallpapers/
-    ├── default.png
+    ├── default.jpg
     └── ... your wallpapers
 ```
 
@@ -196,6 +200,11 @@ The active theme is recorded in the manifest. A plain `.\install.ps1` afterward 
 
 Drop a folder under `themes/<your-name>/` with whatever files you want to override. Run `.\install.ps1 -Theme <your-name>`. No installer changes needed. No PRs to this repo needed. Just ship it.
 
+Two scripts in the repo root help with this:
+
+- **`scaffold-theme.ps1`** — creates a new theme folder pre-populated with base config files. `.\scaffold-theme.ps1 -Names gruvbox`.
+- **`compress-all-themes.ps1`** — walks every wallpaper in `themes/` and compresses it (PNG → JPEG where appropriate, resize to 1920 wide, quality 82, strip metadata). Run this before `git add` when adding new themes so the repo stays lean.
+
 ---
 
 ## Repository structure
@@ -204,6 +213,8 @@ Drop a folder under `themes/<your-name>/` with whatever files you want to overri
 Windows-Rice/
 ├── install.ps1
 ├── uninstall.ps1
+├── scaffold-theme.ps1
+├── compress-all-themes.ps1
 ├── README.md
 ├── LICENSE
 ├── configs/                     # base configs = the "mocha" theme
@@ -228,10 +239,15 @@ Windows-Rice/
 │   └── terminal/
 │       └── settings.json
 ├── themes/                      # override themes
+│   ├── ayu-dark/
+│   ├── dracula/
 │   ├── everforest/
-│   ├── monochrome/
+│   ├── gruvbox/
 │   ├── kanagawa/
-│   └── rose-pine/
+│   ├── monochrome/
+│   ├── nord/
+│   ├── rose-pine/
+│   └── tokyo-night/
 ├── assets/
 │   ├── icons/
 │   ├── wallpapers/
@@ -243,6 +259,8 @@ Windows-Rice/
 |---|---|
 | `install.ps1` | The installer. Also the config deployer, the theme swapper, the updater, and the backup system. |
 | `uninstall.ps1` | The uninstaller. Restores your old configs and removes only the packages this installer actually installed. |
+| `scaffold-theme.ps1` | Creates a new theme folder pre-populated with base config files. |
+| `compress-all-themes.ps1` | Compresses every wallpaper in `themes/`. Run before committing new themes. |
 | `configs/` | Base config templates. This is `mocha`. |
 | `themes/` | Per-theme overrides. Folder names are theme names. |
 | `assets/wallpapers/` | Base wallpapers, used when a theme doesn't provide its own. |
@@ -680,6 +698,16 @@ The bundled set is intentionally small — enough to get started, not enough to 
 
 To add your own, drop files into `assets/wallpapers/` before running `install.ps1`, or copy them into `~/Pictures/Windows-Rice/` after install. YASB picks up new files automatically.
 
+### Compressing new wallpapers
+
+Every theme ships compressed wallpapers — capped at 1920 wide, quality 82, metadata stripped. When adding your own, run them through `compress-all-themes.ps1` before committing:
+
+```powershell
+.\compress-all-themes.ps1
+```
+
+It converts large PNGs to JPEG, resizes everything to fit 1920×1080, and reports per-theme sizes at the end. Running it on a fresh theme typically reduces 50–100 MB of raw images to 3–8 MB.
+
 ---
 
 ## Customization
@@ -789,7 +817,7 @@ Windows-Rice configures software made by other people. Upstream projects include
 - **btop**, **fd**, **fzf**, **ripgrep**, **yazi**, **yt-dlp**, **FFmpeg**, **7-Zip**, **jq**, **zoxide**, **ImageMagick** — the CLI power tools that make a shell worth using
 - **ChronoTerm**, **cmatrix-win**, **Thide**, **GlazeWM AutoTiler**, **Flow Launcher**, **Windhawk** — the extras that make it fun
 - **JetBrains Mono** and the **Nerd Fonts** project for the font
-- **Catppuccin**, **Everforest**, **Kanagawa**, **Rosé Pine** for the palettes
+- **Catppuccin**, **Ayu**, **Dracula**, **Everforest**, **Gruvbox**, **Kanagawa**, **Nord**, **Rosé Pine**, **Tokyo Night** for the palettes
 
 Upstream URLs are intentionally omitted here until they're verified for this repository.
 
