@@ -12,7 +12,7 @@ bars:
     - '*'
     class_name: yasb-bar
     alignment:
-      position: bottom
+      position: top
       align: center
     animation:
       enabled: true
@@ -64,7 +64,7 @@ widgets:
   home:
     type: yasb.home.HomeWidget
     options:
-      direction: up
+      direction: down
       label: "<span>♪</span>"
       menu_list:
       - title: User Home
@@ -95,7 +95,7 @@ widgets:
         blur: false
         round_corners: true
         alignment: center
-        direction: up
+        direction: down
         extended: false
         show_years: true
         show_holidays: false
@@ -123,7 +123,7 @@ widgets:
         round_corners_type: normal
         border_color: system
         alignment: right
-        direction: up
+        direction: down
         show_apps: true
         show_app_labels: true
         show_app_icons: true
@@ -151,7 +151,7 @@ widgets:
       menu_style: popup
       popup:
         blur: false
-        direction: up
+        direction: down
         round_corners: true
         round_corners_type: normal
         border_color: System
@@ -223,7 +223,7 @@ widgets:
         round_corners_type: "normal"
         border_color: None
         alignment: "center"
-        direction: "up"
+        direction: "down"
         offset_top: 6
         offset_left: 0
   wallpapers:
@@ -281,7 +281,7 @@ widgets:
         round_corners_type: "normal"
         border_color: "system"
         alignment: "right"
-        direction: "up"
+        direction: "down"
         offset_top: 6
         offset_left: 0
         thumbnail_corner_radius: 0
@@ -323,7 +323,7 @@ widgets:
         round_corners_type: "normal"
         border_color: "system"
         alignment: "right"
-        direction: "up"
+        direction: "down"
         offset_top: 6
         offset_left: 0
         show_layout_icon: true
@@ -410,7 +410,7 @@ widgets:
         on_right: "toggle_menu"
       menu:
         enabled: true
-        direction: "up"
+        direction: "down"
         show_graph: true
         show_graph_grid: true
         graph_history_size: 60
@@ -442,7 +442,7 @@ widgets:
         - "\u2588"
       menu:
         enabled: true
-        direction: "up"
+        direction: "down"
         show_graph: true
         show_graph_grid: true
         graph_history_size: 60
@@ -475,7 +475,7 @@ widgets:
         - "media"
       popup:
         alignment: "right"
-        direction: "up"
+        direction: "down"
         border_color: none
         round_corners: false
         blur: false
@@ -600,7 +600,7 @@ widgets:
         round_corners_type: "normal"
         border_color: "System"
         alignment: "right"
-        direction: "up"
+        direction: "down"
         offset_top: 6
         offset_left: 0
       wifi_icons: [
