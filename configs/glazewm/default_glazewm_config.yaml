@@ -58,12 +58,12 @@ window_effects:
   focused_window:
     border:
       enabled: true
-      color: '#8dbcff'
+      color: '#CBA6F7'
     hide_title_bar:
       enabled: false
     corner_style:
       enabled: true
-      style: 'rounded'
+      style: 'small_rounded'
     transparency:
       enabled: true
       opacity: '98%'
@@ -71,15 +71,15 @@ window_effects:
   other_windows:
     border:
       enabled: true
-      color: '#a1a1a1'
+      color: '#585B70'
     hide_title_bar:
       enabled: false
     corner_style:
       enabled: true
-      style: 'rounded'
+      style: 'small_rounded'
     transparency:
       enabled: true
-      opacity: '95%'
+      opacity: '92%'
 
 window_behavior:
   initial_state: 'tiling'

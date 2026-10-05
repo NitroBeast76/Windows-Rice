@@ -79,7 +79,7 @@ window_effects:
       style: 'rounded'
     transparency:
       enabled: true
-      opacity: '95%'
+      opacity: '94%'
 
 window_behavior:
   initial_state: 'tiling'

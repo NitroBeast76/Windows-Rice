@@ -47,12 +47,12 @@ general:
 
 gaps:
   scale_with_dpi: true
-  inner_gap: '12px'
+  inner_gap: '10px'
   outer_gap:
-    top: '12px'
-    right: '12px'
-    bottom: '12px'
-    left: '12px'
+    top: '10px'
+    right: '10px'
+    bottom: '10px'
+    left: '10px'
 
 window_effects:
   focused_window:
@@ -63,10 +63,10 @@ window_effects:
       enabled: false
     corner_style:
       enabled: true
-      style: 'rounded'
+      style: 'small_rounded'
     transparency:
       enabled: true
-      opacity: '98%'
+      opacity: '97%'
 
   other_windows:
     border:
@@ -76,10 +76,10 @@ window_effects:
       enabled: false
     corner_style:
       enabled: true
-      style: 'rounded'
+      style: 'small_rounded'
     transparency:
       enabled: true
-      opacity: '95%'
+      opacity: '93%'
 
 window_behavior:
   initial_state: 'tiling'

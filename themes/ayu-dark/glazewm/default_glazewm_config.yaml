@@ -63,7 +63,7 @@ window_effects:
       enabled: false
     corner_style:
       enabled: true
-      style: 'rounded'
+      style: 'square'
     transparency:
       enabled: true
       opacity: '98%'
@@ -76,10 +76,10 @@ window_effects:
       enabled: false
     corner_style:
       enabled: true
-      style: 'rounded'
+      style: 'square'
     transparency:
       enabled: true
-      opacity: '95%'
+      opacity: '94%'
 
 window_behavior:
   initial_state: 'tiling'

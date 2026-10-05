@@ -66,7 +66,7 @@ window_effects:
       style: 'rounded'
     transparency:
       enabled: true
-      opacity: '98%'
+      opacity: '97%'
 
   other_windows:
     border:
@@ -79,7 +79,7 @@ window_effects:
       style: 'rounded'
     transparency:
       enabled: true
-      opacity: '95%'
+      opacity: '90%'
 
 window_behavior:
   initial_state: 'tiling'

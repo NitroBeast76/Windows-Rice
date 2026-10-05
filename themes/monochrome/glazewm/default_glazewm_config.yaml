@@ -47,23 +47,23 @@ general:
 
 gaps:
   scale_with_dpi: true
-  inner_gap: '12px'
+  inner_gap: '8px'
   outer_gap:
-    top: '12px'
-    right: '12px'
-    bottom: '12px'
-    left: '12px'
+    top: '8px'
+    right: '8px'
+    bottom: '8px'
+    left: '8px'
 
 window_effects:
   focused_window:
     border:
       enabled: true
-      color: '#F2F2F2'           # <- focused border: light gray (monochrome)
+      color: '#F2F2F2'
     hide_title_bar:
       enabled: false
     corner_style:
       enabled: true
-      style: 'rounded'
+      style: 'square'
     transparency:
       enabled: true
       opacity: '98%'
@@ -71,15 +71,15 @@ window_effects:
   other_windows:
     border:
       enabled: true
-      color: '#303030'           # <- unfocused border: mid gray
+      color: '#303030'
     hide_title_bar:
       enabled: false
     corner_style:
       enabled: true
-      style: 'rounded'
+      style: 'square'
     transparency:
       enabled: true
-      opacity: '95%'
+      opacity: '88%'
 
 window_behavior:
   initial_state: 'tiling'
