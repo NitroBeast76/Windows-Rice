@@ -219,14 +219,14 @@ background = '#0f1419'
 
 gradient = 1
 
-gradient_color_1 = '#ff7733'   # orange — identity at the base
-gradient_color_2 = '#e7c547'   # yellow
-gradient_color_3 = '#b8cc52'   # green
-gradient_color_4 = '#95e6cb'   # cyan
-gradient_color_5 = '#36a3d9'   # blue
-gradient_color_6 = '#a37acc'   # purple
-gradient_color_7 = '#f07178'   # red
-gradient_color_8 = '#e6e1cf'   # text
+gradient_color_1 = '#ff7733'
+gradient_color_2 = '#e7c547'
+gradient_color_3 = '#b8cc52'
+gradient_color_4 = '#95e6cb'
+gradient_color_5 = '#36a3d9'
+gradient_color_6 = '#a37acc'
+gradient_color_7 = '#f07178'
+gradient_color_8 = '#e6e1cf'
 
 
 [smoothing]
