@@ -864,7 +864,7 @@ function Install-AllPackages {
     $links = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'
     if (Test-Path -LiteralPath $links) {
         $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-        if ($userPath -notlike "*$links*") {
+        if (($userPath -split ';' | Where-Object { $_ -ne '' }) -notcontains $links) {
             [Environment]::SetEnvironmentVariable('Path', "$userPath;$links", 'User')
             Write-Info "Added winget Links folder to user PATH"
         }
@@ -963,7 +963,7 @@ function Install-Thide {
         Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
 
         $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-        if ($userPath -notlike "*$thideDir*") {
+        if (($userPath -split ';' | Where-Object { $_ -ne '' }) -notcontains $thideDir) {
             [Environment]::SetEnvironmentVariable('Path', "$userPath;$thideDir", 'User')
             Write-Info "Added $thideDir to user PATH"
         }
@@ -1021,7 +1021,7 @@ function Install-GlazeAutoTiler {
         Invoke-WebRequest -Uri $url -OutFile $autotilerExe -UseBasicParsing -ErrorAction Stop
 
         $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-        if ($userPath -notlike "*$autotilerDir*") {
+        if (($userPath -split ';' | Where-Object { $_ -ne '' }) -notcontains $autotilerDir) {
             [Environment]::SetEnvironmentVariable('Path', "$userPath;$autotilerDir", 'User')
             Write-Info "Added $autotilerDir to user PATH"
         }
@@ -1068,7 +1068,7 @@ function Install-ChronoTerm {
         Invoke-WebRequest -Uri $url -OutFile $exe -UseBasicParsing -ErrorAction Stop
 
         $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-        if ($userPath -notlike "*$dir*") {
+        if (($userPath -split ';' | Where-Object { $_ -ne '' }) -notcontains $dir) {
             [Environment]::SetEnvironmentVariable('Path', "$userPath;$dir", 'User')
             Write-Info "Added $dir to user PATH"
         }
@@ -1120,7 +1120,7 @@ function Install-CMatrixWin {
         Invoke-WebRequest -Uri $url -OutFile $exe -UseBasicParsing -ErrorAction Stop
 
         $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-        if ($userPath -notlike "*$dir*") {
+        if (($userPath -split ';' | Where-Object { $_ -ne '' }) -notcontains $dir) {
             [Environment]::SetEnvironmentVariable('Path', "$userPath;$dir", 'User')
             Write-Info "Added $dir to user PATH"
         }
@@ -1474,7 +1474,7 @@ function Deploy-RiceLauncher {
     }
 
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-    if ($userPath -notlike "*$LocalBinDir*") {
+    if (($userPath -split ';' | Where-Object { $_ -ne '' }) -notcontains $LocalBinDir) {
         [Environment]::SetEnvironmentVariable('Path', "$userPath;$LocalBinDir", 'User')
         Write-Info "Added $LocalBinDir to user PATH"
     }
