@@ -5,10 +5,11 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](#license)
 [![Themes](https://img.shields.io/badge/themes-10-cba6f7)](#themes)
 [![Starship](https://img.shields.io/badge/prompt-Starship-DD0B78?logo=starship&logoColor=white)](#what-you-actually-get)
+[![TUI](https://img.shields.io/badge/tui-included-89b4fa)](#the-tui)
 
-A Windows 10/11 rice you install once. GlazeWM, YASB, Starship, and a curated pile of CLI tools, deployed by a PowerShell script that knows how to say sorry.
+A Windows 10/11 rice you install once. GlazeWM, YASB, Starship, and a curated pile of CLI tools, deployed by a PowerShell script that knows how to say sorry. Plus a menu-driven TUI for every action after install, so you don't have to remember any flags.
 
-**One command to install. One command to undo. Zero "well, actually, you'll need to manually edit the registry."**
+**One command to install. One command to undo. One command to change everything else. Zero "well, actually, you'll need to manually edit the registry."**
 
 ```powershell
 git clone https://github.com/NitroBeast76/Windows-Rice.git
@@ -16,7 +17,7 @@ cd Windows-Rice
 .\install.ps1
 ```
 
-That's it. Really. If this README were a mile longer, you'd still only need those three lines.
+That's it. Really. If this README were a mile longer, you'd still only need those three lines. After that, `win-rice` opens the TUI and you never type another flag.
 
 ![Windows-Rice — tiled workspace with cava, btop, and Fastfetch](assets/screenshots/tiling.jpg)
 
@@ -35,40 +36,65 @@ That's it. Really. If this README were a mile longer, you'd still only need thos
 
 ## Contents
 
-- [Why this exists](#why-this-exists)
-- [What you actually get](#what-you-actually-get)
-  - [Desktop / UI](#desktop--ui)
-  - [CLI tools](#cli-tools)
-  - [New in 1.3](#new-in-13)
-  - [Fonts](#fonts)
-  - [PowerShell](#powershell)
-- [Themes](#themes)
-  - [Switching themes](#switching-themes)
-  - [How themes actually work](#how-themes-actually-work)
-  - [Adding your own theme](#adding-your-own-theme)
-- [Repository structure](#repository-structure)
-- [Requirements](#requirements)
-- [Installation](#installation)
-  - [If Windows says "no"](#if-windows-says-no)
-  - [What the installer does](#what-the-installer-does)
-- [Installer options](#installer-options)
-  - [Examples that will actually help you](#examples-that-will-actually-help-you)
-  - [About `-SkipPackages`](#about--skippackages)
-- [After the install](#after-the-install)
-- [CLI tools cheat sheet](#cli-tools-cheat-sheet)
-- [Configuration locations](#configuration-locations)
-- [Startup chain](#startup-chain)
-- [Windows Terminal](#windows-terminal)
-- [Backups & Safety](#backups--safety)
-- [Installation manifest](#installation-manifest)
-- [Uninstallation](#uninstallation)
-- [Wallpapers](#wallpapers)
-- [Customization](#customization)
-- [Updating the rice](#updating-the-rice)
-- [Current limitations](#current-limitations)
-- [Design philosophy](#design-philosophy)
-- [Credits](#credits)
-- [License](#license)
+- [Windows-Rice](#windows-rice)
+  - [Contents](#contents)
+  - [Why this exists](#why-this-exists)
+  - [What you actually get](#what-you-actually-get)
+    - [Desktop / UI](#desktop--ui)
+    - [CLI tools](#cli-tools)
+    - [New in 1.4](#new-in-14)
+    - [New in 1.3](#new-in-13)
+    - [New in 1.2](#new-in-12)
+    - [Fonts](#fonts)
+    - [PowerShell](#powershell)
+  - [Themes](#themes)
+    - [Switching themes](#switching-themes)
+    - [How themes actually work](#how-themes-actually-work)
+    - [Adding your own theme](#adding-your-own-theme)
+  - [The TUI](#the-tui)
+    - [Launching it](#launching-it)
+    - [What it does](#what-it-does)
+    - [What it doesn't do](#what-it-doesnt-do)
+    - [Removing the launcher](#removing-the-launcher)
+  - [Repository structure](#repository-structure)
+  - [Requirements](#requirements)
+    - [If you'll use `-Update` or modify the repo](#if-youll-use--update-or-modify-the-repo)
+    - [If you cloned before October 2026](#if-you-cloned-before-october-2026)
+  - [Installation](#installation)
+    - [If Windows says "no"](#if-windows-says-no)
+    - [What the installer does](#what-the-installer-does)
+  - [Installer options](#installer-options)
+    - [Examples that will actually help you](#examples-that-will-actually-help-you)
+    - [About `-SkipPackages`](#about--skippackages)
+  - [After the install](#after-the-install)
+    - [1. Open a new terminal](#1-open-a-new-terminal)
+    - [2. Start GlazeWM](#2-start-glazewm)
+    - [3. Try the TUI](#3-try-the-tui)
+    - [4. Configure Flow Launcher](#4-configure-flow-launcher)
+    - [5. Configure Windhawk](#5-configure-windhawk)
+    - [6. Log out if something is still stale](#6-log-out-if-something-is-still-stale)
+  - [CLI tools cheat sheet](#cli-tools-cheat-sheet)
+    - [A few that change how you work](#a-few-that-change-how-you-work)
+    - [When a command says "not recognized"](#when-a-command-says-not-recognized)
+  - [Configuration locations](#configuration-locations)
+  - [Startup chain](#startup-chain)
+  - [Windows Terminal](#windows-terminal)
+  - [Backups \& Safety](#backups--safety)
+  - [Installation manifest](#installation-manifest)
+  - [Uninstallation](#uninstallation)
+    - [Options](#options)
+    - [Examples](#examples)
+    - [What the launcher removal does](#what-the-launcher-removal-does)
+  - [Wallpapers](#wallpapers)
+    - [Current limitation](#current-limitation)
+    - [Want more wallpapers?](#want-more-wallpapers)
+    - [Compressing new wallpapers](#compressing-new-wallpapers)
+  - [Customization](#customization)
+  - [Updating the rice](#updating-the-rice)
+  - [Current limitations](#current-limitations)
+  - [Design philosophy](#design-philosophy)
+  - [Credits](#credits)
+  - [License](#license)
 
 ---
 
@@ -83,7 +109,7 @@ Windows ricing is stuck in the "here's my dotfiles, figure it out" era. You find
 
 Windows-Rice tries to be what those repos aren't: an actual installer. It backs things up. It tells you what it's about to do. It has an uninstaller, which is the rarest creature in the ricing ecosystem.
 
-It also has themes now, which means you can change how it looks without becoming a CSS archaeologist.
+It also has themes and a TUI now, which means you can change how it looks without becoming a CSS archaeologist or memorizing PowerShell flags.
 
 ---
 
@@ -100,12 +126,20 @@ It also has themes now, which means you can change how it looks without becoming
 | **Fastfetch** | System info printed on shell start. Runs on every new terminal because vanity is a valid use case. |
 | **Windows Terminal** | The terminal host. Yes, the one Microsoft makes. No, we're not switching to Wezterm today. |
 | **PowerShell 7** | The shell. The one that actually works. |
+| **`win-rice`** | The TUI. One command for everything after install. See [The TUI](#the-tui). |
 
 ### CLI tools
 
 `btop` (resource monitor), `fd` (`find` that isn't stuck in 1985), `fzf` (fuzzy finder), `ripgrep` (`grep` but it's fast enough to finish before you do), `yazi` (terminal file manager with previews), `yt-dlp` (the internet's favorite "save that video" tool), `ffmpeg`, `7-Zip`, `jq`, `zoxide`, `ImageMagick`.
 
 If you don't know what half of those do, install and find out. That's the fun part.
+
+### New in 1.4
+
+| Component | Role |
+|---|---|
+| **`rice.ps1`** | Menu-driven TUI. Change theme, update, check status, create a theme, uninstall. Dispatches to `install.ps1` and `uninstall.ps1` with the right flags. |
+| **`win-rice`** | Launcher shim. Installed to `~/.local/bin/win-rice.cmd` and added to user PATH. Works from any shell and from `Win+R`. Removed by `uninstall.ps1`. |
 
 ### New in 1.3
 
@@ -164,11 +198,20 @@ Each theme selects its own Starship palette from the shared `starship.toml`, so 
 
 ### Switching themes
 
+The TUI way:
+
+```powershell
+win-rice
+# pick "Change theme", pick a theme, done
+```
+
+The script way:
+
 ```powershell
 .\install.ps1 -Theme kanagawa -SkipPackages -SkipFonts
 ```
 
-The `-SkipPackages -SkipFonts` tells the installer to skip the boring bits and just swap the config. Takes five seconds. Your terminal, YASB bar, Cava gradient, Starship prompt, Fastfetch logo, wallpaper, and GlazeWM config all swap at once — GlazeWM gets told to reload itself, no manual keypress needed.
+Either path deploys in ~5 seconds. Your terminal, YASB bar, Cava gradient, Starship prompt, Fastfetch logo, wallpaper, and GlazeWM config all swap at once — GlazeWM gets told to reload itself, no manual keypress needed.
 
 ### How themes actually work
 
@@ -198,12 +241,96 @@ The active theme is recorded in the manifest. A plain `.\install.ps1` afterward 
 
 ### Adding your own theme
 
-Drop a folder under `themes/<your-name>/` with whatever files you want to override. Run `.\install.ps1 -Theme <your-name>`. No installer changes needed. No PRs to this repo needed. Just ship it.
+The TUI has a "Create a new theme" option that scaffolds a folder from any existing theme, prompts for wallpapers, and opens Explorer when it's done.
 
-Two scripts in the repo root help with this:
+The script way:
 
-- **`scaffold-theme.ps1`** — creates a new theme folder pre-populated with base config files. `.\scaffold-theme.ps1 -Names gruvbox`.
-- **`compress-all-themes.ps1`** — walks every wallpaper in `themes/` and compresses it (PNG → JPEG where appropriate, resize to 1920 wide, quality 82, strip metadata). Run this before `git add` when adding new themes so the repo stays lean.
+```powershell
+.\scaffold-theme.ps1 -Names gruvbox-dark
+```
+
+Either path creates a new folder under `themes/`, pre-populated with the base config files. Then edit `yasb/styles.css` (colors), `starship/starship.toml` (palette block), `terminal/settings.json` (scheme name), and `chronoterm/config.toml` (accent color). Drop wallpapers in `wallpapers/` and apply with `-Theme <your-name>`.
+
+Before committing new themes, run:
+
+```powershell
+.\compress-all-themes.ps1
+```
+
+That resizes every wallpaper to 1920 wide, converts large PNGs to JPEG, and strips metadata. It typically takes 50–100 MB of raw images down to 3–8 MB.
+
+No installer changes needed to add a theme. No PRs to this repo needed. Just ship it.
+
+---
+
+## The TUI
+
+`rice.ps1` is a menu-driven front-end for everything the installer does. It reads state from the manifest, dispatches to `install.ps1` and `uninstall.ps1` as child processes with the right flags, and returns to the menu after each action. No flags to remember. No paths to type.
+
+```
+  Windows-Rice
+  ============
+
+  Current theme: kanagawa
+  Last updated:  2026-10-08 19:27
+
+  1  Change theme
+  2  Update
+  3  Status
+  4  Create a new theme
+  5  Uninstall
+  0  Exit
+
+  Choice: _
+```
+
+### Launching it
+
+**First time, before install:** open a shell in the repo and run `.\rice.ps1`. The menu shows a single "Install" option, because there's no manifest yet.
+
+**After install:** `win-rice` works from any shell, any terminal, and from `Win+R`. The installer writes a `.cmd` shim to `~/.local/bin/` and adds that folder to your user PATH. Windows resolves `.cmd` files from PATH by default, so the command just works.
+
+The shim prefers `pwsh` and falls back to `powershell.exe`, so it works on a fresh Windows install before PowerShell 7 is present.
+
+> **First-run PATH refresh.** Adding a folder to the user PATH only affects processes started after the change. The shell you ran the installer in won't see `win-rice` until you open a new one — and Windows Terminal itself needs to be restarted from a process that has the new environment. The reliable trigger is a log out / log in, or `Stop-Process -Name explorer -Force` (Explorer restarts automatically within a few seconds and hands the updated environment to new processes). After that, `win-rice` resolves everywhere.
+
+### What it does
+
+| Menu item | Under the hood |
+|---|---|
+| **Install** | `install.ps1 -Theme <picked>` |
+| **Change theme** | `install.ps1 -Theme <picked> -SkipPackages -SkipFonts` |
+| **Update** | `install.ps1 -Update -SkipPackages -SkipFonts` |
+| **Status** | Reads the manifest directly — current theme, install date, deployed config paths |
+| **Create a new theme** | Scaffolds a folder from an existing theme, prompts for name and wallpapers, offers to open Explorer |
+| **Uninstall** | `uninstall.ps1` with optional `-RemovePackages` and `-Purge` |
+
+Child process output streams live. You see the installer's full banner, per-package progress, and summary exactly as if you'd run it manually.
+
+### What it doesn't do
+
+Deliberately minimal. The TUI is a launcher, not a control panel.
+
+- **No config editing.** Editing YAML in a TUI is worse than opening VS Code.
+- **No wallpaper browsing.** YASB has a gallery (`Alt+W`). That's the wallpaper UI.
+- **No package cherry-picking.** Full install, full uninstall, no in-between. `-SkipPackages` covers the fast path.
+- **No theme previews.** Renders require applying the theme. Pick, apply, look, change if you don't like it — five-second loop.
+- **No git operations beyond `-Update`.** No branches, no commits, no "save my changes." Use git for git.
+- **No subcommands.** `win-rice` opens the menu, period. If you want flags, use `install.ps1` directly.
+
+Every one of these is a temptation to build, and each one doubles the surface area of the TUI without solving the actual problem it exists for: letting people use the rice without memorizing flags.
+
+### Removing the launcher
+
+`uninstall.ps1` removes `~/.local/bin/win-rice.cmd` automatically. It leaves `~/.local/bin/` itself in place, since the other tool folders (thide, chronoterm, cmatrix, glaze-autotiler) live under it and other projects may use the folder too.
+
+To remove it without running the full uninstaller:
+
+```powershell
+Remove-Item "$env:USERPROFILE\.local\bin\win-rice.cmd" -Force
+```
+
+The TUI itself (`rice.ps1`) stays in the repo. You can always launch it directly with `.\rice.ps1` from the repo root, and re-running `install.ps1` recreates the shim.
 
 ---
 
@@ -213,6 +340,7 @@ Two scripts in the repo root help with this:
 Windows-Rice/
 ├── install.ps1
 ├── uninstall.ps1
+├── rice.ps1
 ├── scaffold-theme.ps1
 ├── compress-all-themes.ps1
 ├── README.md
@@ -257,8 +385,9 @@ Windows-Rice/
 
 | Path | What it is |
 |---|---|
-| `install.ps1` | The installer. Also the config deployer, the theme swapper, the updater, and the backup system. |
-| `uninstall.ps1` | The uninstaller. Restores your old configs and removes only the packages this installer actually installed. |
+| `install.ps1` | The installer. Also the config deployer, the theme swapper, the updater, the launcher installer, and the backup system. |
+| `uninstall.ps1` | The uninstaller. Restores your old configs, removes the launcher, and uninstalls only the packages this installer actually installed. |
+| `rice.ps1` | The TUI. Menu-driven front-end that dispatches to `install.ps1` and `uninstall.ps1`. |
 | `scaffold-theme.ps1` | Creates a new theme folder pre-populated with base config files. |
 | `compress-all-themes.ps1` | Compresses every wallpaper in `themes/`. Run before committing new themes. |
 | `configs/` | Base config templates. This is `mocha`. |
@@ -276,9 +405,38 @@ Windows-Rice/
 - `winget` (App Installer from the Microsoft Store).
 - `git` if you're cloning. If you downloaded a ZIP, no `git` needed — but also, no `-Update` for you. That's the trade-off.
 
-**No administrator privileges required.** Everything installs per-user. Scoop goes into your profile, configs go into your home directory, nothing touches Program Files.
+**No administrator privileges required.** Everything installs per-user. Scoop goes into your profile, configs go into your home directory, the launcher shim goes into `~/.local/bin/`, and nothing touches Program Files.
 
 If you *want* to run it as admin, you can. It won't change anything — but the rice won't be visible in your normal user session. Don't do that.
+
+### If you'll use `-Update` or modify the repo
+
+The installer doesn't need a git identity — it just reads and copies files. But if you plan to run `.\install.ps1 -Update` after editing anything under `configs/`, or if you want to fork the repo and add your own theme, git needs to know who you are. One-time setup:
+
+```powershell
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+```
+
+Without this, `git pull` will fail with `Committer identity unknown` when the local branch has diverged from the remote and git tries to create a merge commit. A plain `git clone` and `.\install.ps1` work fine without it.
+
+### If you cloned before October 2026
+
+The repository's git history was rewritten once, to purge large wallpaper files from old commits. Clones made before that rewrite share no common ancestor with the current `origin/main` — every commit hash is different.
+
+`git pull` will fail with one of:
+
+- `Committer identity unknown` — git tries to create a merge commit, which needs a configured identity
+- `refusing to merge unrelated histories`
+
+The fix is a one-time reset:
+
+```powershell
+git fetch origin
+git reset --hard origin/main
+```
+
+That discards any local commits and uncommitted changes, and points your branch at the current remote. After it runs, `.\install.ps1 -Update` works normally. This won't happen again — no future changes will rewrite history.
 
 ---
 
@@ -289,6 +447,14 @@ git clone https://github.com/NitroBeast76/Windows-Rice.git
 cd Windows-Rice
 .\install.ps1
 ```
+
+If you'd rather pick a theme up-front, add `-Theme <name>`:
+
+```powershell
+.\install.ps1 -Theme kanagawa
+```
+
+You can also just run `.\rice.ps1` from the repo. The menu detects that no manifest exists and offers a single "Install" option, which prompts for a theme and runs the full install. Same result, fewer typed flags.
 
 ### If Windows says "no"
 
@@ -322,14 +488,17 @@ In order:
 4. Installs the Nerd Font (unless `-SkipFonts` or `-SkipPackages`).
 5. Deploys configuration files.
 6. Deploys wallpapers.
-7. Tells GlazeWM to reload its config, if it's running.
-8. Ensures PSReadLine is present (skipped under `-SkipPackages`).
-9. Merges your Windows Terminal `settings.json` (unless `-SkipTerminal`).
-10. Writes an installation manifest.
-11. Verifies the result.
-12. Prints a summary.
+7. Creates the `win-rice` launcher shim at `~/.local/bin/win-rice.cmd`, and adds `~/.local/bin/` to your user PATH if it's not already there.
+8. Tells GlazeWM to reload its config, if it's running.
+9. Ensures PSReadLine is present (skipped under `-SkipPackages`).
+10. Merges your Windows Terminal `settings.json` (unless `-SkipTerminal`).
+11. Writes an installation manifest.
+12. Verifies the result.
+13. Prints a summary.
 
-Everything in steps 3–9 is backed up before it overwrites anything. Everything.
+Everything in steps 3–10 is backed up before it overwrites anything. Everything.
+
+Step 7 runs even with `-SkipPackages`, because the launcher isn't a package — it's a config-file artifact like the rest.
 
 ---
 
@@ -372,7 +541,7 @@ Everything in steps 3–9 is backed up before it overwrites anything. Everything
 `-SkipPackages` is the "do not install anything" switch. It's the nuclear option for when you just want the config files swapped.
 
 - It **does** skip: winget, Scoop, the Nerd Font, PSReadLine, Thide, GlazeWM AutoTiler, Flow Launcher, Windhawk, ChronoTerm, cmatrix.
-- It **does not** skip: config deployment, wallpaper deployment, WT merge, the GlazeWM reload.
+- It **does not** skip: config deployment, wallpaper deployment, launcher creation, WT merge, the GlazeWM reload.
 
 If you want a fast theme swap, use `-SkipPackages -SkipFonts`. The install finishes in seconds because there's nothing left to install.
 
@@ -380,11 +549,13 @@ If you want a fast theme swap, use `-SkipPackages -SkipFonts`. The install finis
 
 ## After the install
 
-The installer puts everything on disk. But three components need a first launch before they do anything useful. This is the part most READMEs gloss over, and then you get issues on GitHub saying "the bar isn't showing."
+The installer puts everything on disk. But four components need a first launch before they do anything useful. This is the part most READMEs gloss over, and then you get issues on GitHub saying "the bar isn't showing."
 
 ### 1. Open a new terminal
 
-Close the one you ran the installer in and open a fresh one. This loads the updated PATH and picks up the Nerd Font. If you skip this step, commands will be "not recognized" and the font will look wrong, and you'll open an issue, and we'll both be sad.
+Close the one you ran the installer in and open a fresh one. This loads the updated PATH (including `~/.local/bin`, so `win-rice` resolves) and picks up the Nerd Font.
+
+If `win-rice` still isn't found in the fresh shell, the parent process — Windows Terminal, or the desktop Explorer session — started before the PATH change. Restart Explorer (`Stop-Process -Name explorer -Force`) or log out and back in. That's the reliable fix for any "command was just installed but doesn't resolve" situation on Windows.
 
 ### 2. Start GlazeWM
 
@@ -414,13 +585,21 @@ The bar should appear at the top of your screen within a second or two. The Auto
 | `Alt + Shift + E` | Exit GlazeWM |
 | `Alt + Shift + R` | Reload config |
 
-### 3. Configure Flow Launcher
+### 3. Try the TUI
+
+```powershell
+win-rice
+```
+
+Opens the menu. From here you can change theme, update, check status, create a new theme, or uninstall — all without remembering a single flag. This is the intended way to use the rice after install.
+
+### 4. Configure Flow Launcher
 
 Open **Flow Launcher** from the Start Menu (there's no `flow` CLI shim, don't try to type it). First run walks you through theme and indexing. Once done, `Alt+Space` opens it.
 
 Since Thide hides the taskbar, Flow Launcher is your primary "launch programs by name" tool. It replaces the Start menu search you no longer have.
 
-### 4. Configure Windhawk
+### 5. Configure Windhawk
 
 Open **Windhawk** from the Start Menu. **No mods are installed by default** — the installer only puts the platform in place.
 
@@ -431,9 +610,9 @@ Windhawk runs mods *inside* Windows system processes. A bad mod can crash Explor
 
 Taskbar mods are useless here because Thide hides the taskbar.
 
-### 5. Log out if something is still stale
+### 6. Log out if something is still stale
 
-Fonts and some shell extensions refresh only on login. If your terminal font still looks wrong after step 1, log out and back in. This is the correct answer approximately 95% of the time when ricing breaks in a way that makes no sense.
+Fonts, PATH changes, and some shell extensions refresh only on login. If your terminal font still looks wrong or `win-rice` still doesn't resolve after step 1, log out and back in. This is the correct answer approximately 95% of the time when ricing breaks in a way that makes no sense.
 
 ---
 
@@ -460,6 +639,7 @@ None of these require configuration. They work from any shell once PATH is refre
 | `chronoterm` | Clock in your terminal | `chronoterm` |
 | `cmatrix` | Falling code | `cmatrix` |
 | `starship` | The prompt | (runs on every prompt) |
+| `win-rice` | The TUI | `win-rice` |
 
 ### A few that change how you work
 
@@ -476,6 +656,8 @@ magick input.jpg -resize 1920x -strip "$HOME\Pictures\Windows-Rice\my-wallpaper.
 ```
 
 Caps width at 1920, preserves aspect ratio, strips metadata. Same command the shrink script uses.
+
+**`win-rice`** is the one you'll actually type most often. Everything else here runs on demand — the TUI is how you *manage* the rice without opening the repo folder.
 
 **`chronoterm`** and **`cmatrix`** are "just because you can." There's no productivity gain. There is, however, a clock and a Matrix effect. That's the point.
 
@@ -511,7 +693,10 @@ Everything deploys under your home directory. The installer resolves `~` from `$
 | `configs/starship/starship.toml` | `~/.config/starship.toml` |
 | `configs/terminal/settings.json` | Merged into Windows Terminal's user `settings.json` |
 | `assets/wallpapers/**` | `~/Pictures/Windows-Rice/**` |
+| *(generated)* | `~/.local/bin/win-rice.cmd` — launcher shim |
 | Backups and manifest | `~/.windows-rice-backup/` |
+
+**The launcher shim is generated, not copied.** Unlike every other deployed file, `win-rice.cmd` doesn't exist in the repo. `install.ps1` writes it fresh, baking in the repo path at install time. If you move the repo, re-run `install.ps1` from the new location — the shim will be rewritten to point at the correct path. Uninstall removes it.
 
 **Starship uses one file, not a folder.** `~/.config/starship.toml` is Starship's documented default location. The repo stores it at `configs/starship/starship.toml` for symmetry with every other component; only the destination differs.
 
@@ -543,6 +728,8 @@ YASB loads ~/.config/yasb/config.yaml + styles.css
 `shell-exec` is required because GlazeWM parses each entry as one of its own subcommands, not as a raw shell string. You can't just put `yasb.exe` and hope. Well, you can hope. It won't work.
 
 On cold boot, YASB may briefly show its "GlazeWM is offline" message before the IPC pipe is ready. It reconnects within seconds. This is not a bug, it's a race condition that everyone loses gracefully.
+
+**The TUI is not on the startup chain.** `win-rice` only runs when you invoke it. Nothing about the rice starts the menu on boot; you launch it when you want to do something.
 
 ---
 
@@ -605,6 +792,8 @@ config.yaml.backup-2026-09-15-203000
 
 **The backup system only touches files this project manages.** It's not a system-wide backup tool. It's not a Time Machine. It doesn't care about your photos.
 
+The launcher shim is the one deployed artifact that has no backup — because there's nothing to back up. It's generated fresh every run, and uninstall removes it outright.
+
 ---
 
 ## Installation manifest
@@ -625,6 +814,8 @@ Packages that were already present before the installer ran are marked `AlreadyI
 
 If the manifest is missing or unreadable, package removal is skipped entirely with a warning. Restoring configs still runs. Conservative by design — we'd rather leave software installed than uninstall something you didn't ask us to uninstall.
 
+The manifest also drives the TUI. `rice.ps1` reads it to determine whether the menu shows the "Install" variant (no manifest) or the "Change theme / Update / Status / Create theme / Uninstall" variant (manifest exists). Corrupt manifest → treat as not installed → install rewrites it.
+
 **The manifest is a record of what this installer did.** It is not a full inventory of your machine. Don't use it as one.
 
 ---
@@ -635,7 +826,14 @@ If the manifest is missing or unreadable, package removal is skipped entirely wi
 .\uninstall.ps1
 ```
 
-Default behaviour restores config files from backups where backups exist. Files that were deployed fresh (no prior version on disk) are left in place.
+Or via the TUI:
+
+```powershell
+win-rice
+# pick "Uninstall"
+```
+
+Both paths do the same thing. Default behaviour restores config files from backups where backups exist, removes the `win-rice` launcher shim, and leaves freshly-deployed files (no prior version on disk) in place.
 
 ### Options
 
@@ -649,10 +847,10 @@ Default behaviour restores config files from backups where backups exist. Files 
 ### Examples
 
 ```powershell
-# Restore configs. Keep the packages.
+# Restore configs, remove the launcher. Keep the packages.
 .\uninstall.ps1
 
-# Restore configs and uninstall rice-installed packages.
+# Restore configs, remove the launcher, and uninstall rice-installed packages.
 .\uninstall.ps1 -RemovePackages
 
 # Restore, uninstall, and delete all backups too.
@@ -665,6 +863,12 @@ Default behaviour restores config files from backups where backups exist. Files 
 - **`-Purge`** removes the backup and manifest data itself, once restoration is done.
 
 If no manifest exists, `-RemovePackages` prints a warning and performs no removal. This is intentional. It means you can't accidentally run the rice uninstaller on a machine that has never had the rice installed and have it start deleting things.
+
+### What the launcher removal does
+
+`uninstall.ps1` deletes `~/.local/bin/win-rice.cmd` if it exists. `win-rice` stops resolving after that. The `~/.local/bin/` folder itself stays — the other tool folders live under it and removing the parent would be destructive beyond what this uninstaller is scoped to.
+
+`rice.ps1` stays in the repo. If you want the TUI back, run `.\rice.ps1` directly from the repo root, or re-run `install.ps1` to recreate the shim.
 
 ---
 
@@ -741,11 +945,22 @@ The backup system makes this recoverable, but it's easier to just do it the righ
 
 ## Updating the rice
 
+The TUI way:
+
+```powershell
+win-rice
+# pick "Update"
+```
+
+The script way:
+
 ```powershell
 .\install.ps1 -Update
 ```
 
-This runs `git pull --ff-only` first, then continues with the normal install. Use `--ff-only` specifically so your local commits don't create merge weirdness. If you've made local changes, `git pull` will refuse and print a message telling you to commit or stash.
+Both run `git fetch` + `git merge --ff-only` first, then continue with the config redeploy. Use `--ff-only` semantics specifically so local commits don't create merge commits — which is why a fresh Windows install without a git identity can still update without hitting `Committer identity unknown`.
+
+If the local branch has diverged from `origin/main` — for example because the remote history was rewritten — the installer warns, shows what would be lost, and offers to reset to `origin/main`. It defaults to "no". Answer `y` only if you don't have local work you care about.
 
 For a fast "I just want the latest configs":
 
@@ -753,9 +968,9 @@ For a fast "I just want the latest configs":
 .\install.ps1 -Update -SkipPackages -SkipFonts
 ```
 
-That pulls, redeploys configs, redeploys wallpapers, merges WT, and skips all the package-checking work. Takes seconds.
+That pulls, redeploys configs, redeploys wallpapers, re-creates the launcher, merges WT, and skips all the package-checking work. Takes seconds.
 
-**A note on `-Update` and new packages.** When `-Update` pulls a commit that adds a new package to the install list, that package will **not** be installed in the same run. The reason is that the script already loaded into memory is the old version — `git pull` updates the file on disk, but the running process keeps executing the code it started with.
+**A note on `-Update` and new packages.** When `-Update` pulls a commit that adds a new package to the install list, that package will **not** be installed in the same run. The reason is that the script already loaded into memory is the old version — `git fetch` updates the files on disk, but the running process keeps executing the code it started with.
 
 Two-step fix:
 
@@ -764,7 +979,7 @@ Two-step fix:
 .\install.ps1            # now running the new version — installs any new packages
 ```
 
-Or just run `.\install.ps1` twice whenever you see a changelog entry that mentions a new package. It's the standard "self-updating script" problem, and there's no clean fix that doesn't involve re-launching yourself mid-run.
+Or run the TUI's Update, then close the TUI and run `win-rice` again and pick Update. Same effect.
 
 ---
 
@@ -774,7 +989,9 @@ Or just run `.\install.ps1` twice whenever you see a changelog entry that mentio
 
 **btop on PATH.** Winget installs `btop4win` as a portable package and adds its own package folder to PATH — but not the shared `Links` folder that holds the `btop.exe` alias. So `btop4win` may be callable while `btop` isn't. Close and reopen your terminal first. If it still fails, manually add `%LOCALAPPDATA%\Microsoft\WinGet\Links` to your user PATH.
 
-**Freshly deployed files aren't removed by uninstall.** Files deployed by the installer that had no prior version on disk are left in place. Only files that replaced an existing version can be restored. Same rule applies to wallpapers.
+**First-run PATH refresh.** `win-rice` won't resolve in the shell you ran the installer from. Windows only updates new processes' environments. Open a fresh shell, or restart Explorer, or log out and back in. One of those three will fix it.
+
+**Freshly deployed files aren't removed by uninstall.** Files deployed by the installer that had no prior version on disk are left in place. Only files that replaced an existing version can be restored. Same rule applies to wallpapers. The launcher shim is an exception — it has no prior version to preserve, and uninstall removes it unconditionally.
 
 **JSONC in Windows Terminal settings.** If your existing `settings.json` has comments that PowerShell's `ConvertFrom-Json` can't parse, the merge is skipped. The installer doesn't strip comments or modify the file. It leaves it alone.
 
@@ -783,6 +1000,8 @@ Or just run `.\install.ps1` twice whenever you see a changelog entry that mentio
 **Flow Launcher and Windhawk don't install CLI shims.** Launch from the Start Menu. Yes, this is slightly annoying. No, we can't fix it without hacking the installer for those specific tools.
 
 **`-Update` doesn't install new packages in the same run.** See the note in [Updating the rice](#updating-the-rice). Run the installer a second time after pulling.
+
+**The TUI is numbered-menu only.** Arrow-key navigation, colored panels, spinners — all skipped in favor of raw `Read-Host` and ASCII output. This is deliberate. It works in every Windows terminal, in every locale, on every PowerShell version back to 5.1, with zero dependencies. A prettier version is possible but not planned.
 
 ---
 
@@ -796,7 +1015,8 @@ In practice:
 - **Safe.** Existing config is compared, backed up, and preserved where possible. Nothing is blindly overwritten.
 - **Reversible.** Backups and the manifest let `uninstall.ps1` restore files and remove only what this installer put there.
 - **Organised.** Configuration lives under predictable per-user locations.
-- **Transparent.** The installer prints what it's doing. `-DryRun` shows the plan before anything changes.
+- **Transparent.** The installer prints what it's doing. `-DryRun` shows the plan before anything changes. The TUI streams child-process output live rather than hiding it behind a spinner.
+- **Discoverable.** `win-rice` opens a menu of everything the rice can do. The flags still exist — the TUI just spares you from having to remember them.
 
 **The installer is not zero-risk.** It modifies files under your home directory. It installs software. The backup and manifest systems exist to make those changes recoverable — not to make them disappear.
 
