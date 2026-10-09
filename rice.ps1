@@ -210,6 +210,21 @@ function Get-PowerShellCommand {
 }
 
 function Invoke-ChildScript {
+    <#
+        Run a child PowerShell script and return its exit code.
+
+        The `| Out-Host` on the invocation is load-bearing. Without it, every
+        line the child script prints flows into this function's return value,
+        and the function returns an array: [line1, line2, ..., exitCode].
+        Callers do `if ($exit -eq 0)`, and PowerShell's -eq against an array
+        filters instead of compares, which returns an empty array (falsy) when
+        0 isn't among the elements. The result is a false failure report that
+        prints the entire child output as the error message.
+
+        Out-Host writes directly to the console host instead of the pipeline,
+        so the child's output still streams live and the return value is a
+        clean integer.
+    #>
     param(
         [Parameter(Mandatory)][string]$ScriptPath,
         [string[]]$ScriptArgs = @()
@@ -219,7 +234,7 @@ function Invoke-ChildScript {
 
     Push-Location $RepoRoot
     try {
-        & $shell -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs
+        & $shell -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @ScriptArgs | Out-Host
         return $LASTEXITCODE
     } finally {
         Pop-Location
