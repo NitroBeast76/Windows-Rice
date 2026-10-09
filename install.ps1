@@ -134,6 +134,13 @@ $WallpaperDir  = Join-Path $PicturesDir 'Windows-Rice'
 $BackupRoot    = Join-Path $HomeDir '.windows-rice-backup'
 $ManifestPath  = Join-Path $BackupRoot 'manifest.json'
 
+# The launcher shim lives at ~/.local/bin/win-rice.cmd and dispatches to
+# rice.ps1 in the repo root. ~/.local/bin/ is on user PATH (added by
+# Deploy-RiceLauncher), so `win-rice` works from any shell and from Win+R.
+$LocalBinDir   = Join-Path $HomeDir '.local\bin'
+$LauncherPath  = Join-Path $LocalBinDir 'win-rice.cmd'
+$RiceScript    = Join-Path $RepoRoot 'rice.ps1'
+
 # -SkipPackages also disables the font install and the PSReadLine install.
 if ($SkipPackages) { $SkipFonts = $true }
 $SkipPSReadLineInstall = [bool]$SkipPackages
@@ -1423,6 +1430,76 @@ function Deploy-Wallpapers {
     }
 }
 
+# ==================================================== RICE LAUNCHER
+
+function Deploy-RiceLauncher {
+    <#
+        Create the `win-rice` launcher shim that opens the TUI (rice.ps1).
+
+        The shim is a .cmd file placed in ~/.local/bin/. Windows resolves
+        .CMD files from PATH via PATHEXT, but does NOT resolve .PS1 files,
+        so a .cmd wrapper is required for `win-rice` to work from a shell
+        or from Win+R.
+
+        The shim prefers pwsh and falls back to powershell.exe, so it works
+        on a fresh Windows install before PowerShell 7 is present.
+
+        The repo path is baked into the shim at install time. If the repo
+        is later moved, re-run install.ps1 from the new location to refresh
+        the shim.
+
+        ~/.local/bin/ is added to the user PATH if not already present. The
+        existing per-tool folders under ~/.local/bin/ (thide, cmatrix-win,
+        chronoterm, glaze-autotiler) keep their own PATH entries — this
+        adds a shared parent for shims like win-rice that don't need their
+        own folder.
+    #>
+    Write-Section 'Launcher'
+
+    if (-not (Test-Path -LiteralPath $RiceScript)) {
+        Write-Skip 'rice.ps1 not present in repo root — skipping launcher'
+        Add-Summary 'Skipped' 'Launcher (rice.ps1 missing)'
+        return
+    }
+
+    if ($DryRun) {
+        Write-Skip "would create $LauncherPath"
+        Write-Skip "would ensure $LocalBinDir is on user PATH"
+        Add-Summary 'Configured' 'Launcher (dry run)'
+        return
+    }
+
+    if (-not (Test-Path -LiteralPath $LocalBinDir)) {
+        New-Item -ItemType Directory -Path $LocalBinDir -Force | Out-Null
+    }
+
+    $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+    if ($userPath -notlike "*$LocalBinDir*") {
+        [Environment]::SetEnvironmentVariable('Path', "$userPath;$LocalBinDir", 'User')
+        Write-Info "Added $LocalBinDir to user PATH"
+    }
+
+    # ASCII, CRLF, no BOM. The batch interpreter is picky about BOMs.
+    $shimContent = @"
+@echo off
+where pwsh >nul 2>nul
+if %ERRORLEVEL%==0 (
+    pwsh -NoProfile -ExecutionPolicy Bypass -File "$RiceScript" %*
+) else (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "$RiceScript" %*
+)
+"@
+
+    try {
+        Set-Content -LiteralPath $LauncherPath -Value $shimContent -Encoding ASCII -ErrorAction Stop
+        Write-Ok 'win-rice launcher created'
+        Add-Summary 'Configured' 'win-rice launcher'
+    } catch {
+        Write-FailLine "Could not create launcher: $_"
+        Add-Summary 'Failed' "Launcher ($_)"
+    }
+}
+
 # ===================================================== WINDOWS TERMINAL
 
 function ConvertTo-DeepHashtable {
@@ -1945,6 +2022,15 @@ function Invoke-Verification {
             Add-Summary 'Failed' "config missing: $f"
         }
     }
+
+    Write-Host ''
+    Write-Info 'Checking launcher...'
+
+    if (Test-Path -LiteralPath $LauncherPath) {
+        Write-Ok $LauncherPath
+    } else {
+        Write-Skip "$LauncherPath not present (rice.ps1 missing, or launcher step skipped)"
+    }
 }
 
 # ==================================================== SUMMARY
@@ -1991,6 +2077,13 @@ function Write-FinalSummary {
     if ($ActiveTheme) {
         Write-Host '  Active theme' -ForegroundColor Cyan
         Write-Host "    $ActiveTheme" -ForegroundColor Gray
+        Write-Host ''
+    }
+
+    if (Test-Path -LiteralPath $LauncherPath) {
+        Write-Host '  Launcher' -ForegroundColor Cyan
+        Write-Host '    win-rice' -ForegroundColor Gray
+        Write-Host '    (run in a new shell, or from Win+R)' -ForegroundColor DarkGray
         Write-Host ''
     }
 
@@ -2163,10 +2256,16 @@ Deploy-Wallpapers -ThemeName $ThemeFolderName
 # isn't running.
 Invoke-GlazeWmReload
 
-# 5. PSReadLine -------------------------------------------------------------
+# 5. Launcher ---------------------------------------------------------------
+# Creates ~/.local/bin/win-rice.cmd and ensures ~/.local/bin is on user PATH.
+# Runs even with -SkipPackages so a theme swap or config-only deploy still
+# installs (or refreshes) the launcher.
+Deploy-RiceLauncher
+
+# 6. PSReadLine -------------------------------------------------------------
 Ensure-PSReadLine -NoInstall:$SkipPSReadLineInstall
 
-# 6. Windows Terminal -------------------------------------------------------
+# 7. Windows Terminal -------------------------------------------------------
 if (-not $SkipTerminal) {
     Update-WindowsTerminalConfig -ThemeName $ThemeFolderName
 } else {
@@ -2175,8 +2274,8 @@ if (-not $SkipTerminal) {
     Add-Summary 'Skipped' 'Windows Terminal (-SkipTerminal)'
 }
 
-# 7. Verification -----------------------------------------------------------
+# 8. Verification -----------------------------------------------------------
 Invoke-Verification
 
-# 8. Summary ----------------------------------------------------------------
+# 9. Summary ----------------------------------------------------------------
 Write-FinalSummary -ActiveTheme $ActiveTheme

@@ -27,6 +27,10 @@
     Windows Terminal's settings.json is restored from its backup. If no backup
     exists, the file is left untouched.
 
+    The win-rice launcher shim (~/.local/bin/win-rice.cmd) is removed
+    unconditionally. The ~/.local/bin/ folder itself is left in place because
+    other tools may use it.
+
 .PARAMETER RemovePackages
     Also uninstall the packages recorded in the installation manifest.
     PowerShell 7 and Windows Terminal are intentionally NOT removed.
@@ -77,6 +81,7 @@ $GlazeWmConfigPath   = Join-Path $HomeDir '.glzr\glazewm\config.yaml'
 $CavaConfigPath      = Join-Path $HomeDir '.config\cava\config'
 $FastfetchConfigPath = Join-Path $HomeDir '.config\fastfetch\config.jsonc'
 $FastfetchAsciiPath  = Join-Path $HomeDir '.config\fastfetch\ascii.txt'
+$StarshipConfigPath  = Join-Path $HomeDir '.config\starship.toml'
 
 # Pictures folder resolution must match install.ps1 exactly, so that on a
 # Microsoft-account machine (OneDrive redirection) the uninstaller looks in
@@ -89,6 +94,10 @@ $ThideDir      = Join-Path $HomeDir '.local\bin\thide'
 $AutoTilerDir  = Join-Path $HomeDir '.local\bin\glaze-autotiler'
 $ChronoTermDir = Join-Path $HomeDir '.local\bin\chronoterm'
 $CMatrixDir    = Join-Path $HomeDir '.local\bin\cmatrix-win'
+
+# Rice launcher shim (created by install.ps1's Deploy-RiceLauncher).
+$LocalBinDir  = Join-Path $HomeDir '.local\bin'
+$LauncherPath = Join-Path $LocalBinDir 'win-rice.cmd'
 
 $BackupRoot = Join-Path $HomeDir '.windows-rice-backup'
 $ManifestPath = Join-Path $BackupRoot 'manifest.json'
@@ -618,6 +627,10 @@ function Restore-AllConfigs {
                        -BackupSubdir 'fastfetch' `
                        -Label '~/.config/fastfetch/ascii.txt'
 
+    Restore-FromBackup -Destination $StarshipConfigPath `
+                       -BackupSubdir 'starship' `
+                       -Label '~/.config/starship.toml'
+
     Restore-FromBackup -Destination $PwshProfilePath `
                        -BackupSubdir 'powershell' `
                        -Label 'PowerShell profile'
@@ -700,6 +713,44 @@ function Restore-WindowsTerminal {
     Restore-FromBackup -Destination $wtSettingsPath `
                        -BackupSubdir 'terminal' `
                        -Label 'Windows Terminal settings.json'
+}
+
+function Remove-RiceLauncher {
+    <#
+        Remove the win-rice launcher shim created by install.ps1.
+
+        The shim is a .cmd file at ~/.local/bin/win-rice.cmd. Removing it
+        stops `win-rice` from resolving, but does not remove the repo,
+        rice.ps1, or any other tool. Users who want the TUI back can run
+        rice.ps1 directly from the repo, or re-run install.ps1.
+
+        ~/.local/bin/ itself is left in place. Other tools (thide,
+        glaze-autotiler, chronoterm, cmatrix-win) live under it in their
+        own subfolders, and the folder itself is a general-purpose PATH
+        entry. Removing the parent would be destructive beyond what this
+        uninstaller is scoped to.
+    #>
+    Write-Section 'Launcher'
+
+    if (-not (Test-Path -LiteralPath $LauncherPath)) {
+        Write-Skip 'win-rice launcher not present'
+        return
+    }
+
+    if ($DryRun) {
+        Write-Skip "would remove $LauncherPath"
+        Add-Summary 'Removed' "$LauncherPath (dry run)"
+        return
+    }
+
+    try {
+        Remove-Item -LiteralPath $LauncherPath -Force -ErrorAction Stop
+        Write-Ok "removed: $LauncherPath"
+        Add-Summary 'Removed' 'win-rice launcher'
+    } catch {
+        Write-FailLine "Could not remove launcher — $_"
+        Add-Summary 'Failed' "Launcher ($_)"
+    }
 }
 
 function Remove-WallpaperDirectory {
@@ -918,6 +969,8 @@ function Write-FinalSummary {
     Write-Host '    1. Close and reopen your terminal.' -ForegroundColor Gray
     Write-Host '    2. Restart GlazeWM if it was running.' -ForegroundColor Gray
     Write-Host '    3. Restart Windows Terminal if it was open.' -ForegroundColor Gray
+    Write-Host '    4. The win-rice launcher has been removed. Re-run install.ps1' -ForegroundColor Gray
+    Write-Host '       from the repo to restore it.' -ForegroundColor Gray
     Write-Host ''
 
     Write-Separator
@@ -946,13 +999,16 @@ if (Test-Path -LiteralPath $BackupRoot) {
     Write-Skip 'No backup directory; configuration restore skipped.'
 }
 
-# 2. Wallpaper directory cleanup --------------------------------------------
+# 2. Launcher removal -------------------------------------------------------
+Remove-RiceLauncher
+
+# 3. Wallpaper directory cleanup --------------------------------------------
 Remove-WallpaperDirectory
 
-# 3. Wallpaper files nuke (only with -Purge) --------------------------------
+# 4. Wallpaper files nuke (only with -Purge) --------------------------------
 Remove-WallpaperFiles
 
-# 4. Package removal (opt-in, manifest-driven) ------------------------------
+# 5. Package removal (opt-in, manifest-driven) ------------------------------
 if ($RemovePackages) {
     Uninstall-AllPackages
 } else {
@@ -961,7 +1017,7 @@ if ($RemovePackages) {
     Add-Summary 'Skipped' 'All packages (remove not requested)'
 }
 
-# 5. Purge backups (opt-in) -------------------------------------------------
+# 6. Purge backups (opt-in) -------------------------------------------------
 if ($Purge) {
     Remove-BackupDirectory
 } else {
@@ -969,5 +1025,5 @@ if ($Purge) {
     Write-Skip 'Backups and manifest preserved (pass -Purge to delete)'
 }
 
-# 6. Summary ----------------------------------------------------------------
+# 7. Summary ----------------------------------------------------------------
 Write-FinalSummary
