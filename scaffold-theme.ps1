@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Scaffold one or more new theme folders matching the existing theme structure.
 

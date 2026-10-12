@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Compress every wallpaper in themes\ before pushing.
 
