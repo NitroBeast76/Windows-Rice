@@ -8,8 +8,8 @@
     process, and returns to the menu after each action.
 
     Deliberately minimal: no business logic, no git commands of its own
-    (except calling install.ps1 -Update), no dependencies beyond what
-    Windows ships with.
+    (except calling install.ps1 -Update and the throttled update check),
+    no dependencies beyond what Windows ships with.
 
     Compatible with PowerShell 5.1 and 7+. ASCII output only.
 
@@ -37,6 +37,7 @@ $InstallScript   = Join-Path $RepoRoot 'install.ps1'
 $UninstallScript = Join-Path $RepoRoot 'uninstall.ps1'
 $HomeDir         = $env:USERPROFILE
 $BackupRoot      = Join-Path $HomeDir '.windows-rice-backup'
+$StateRoot       = Join-Path $HomeDir '.windows-rice'
 $ManifestPath    = Join-Path $BackupRoot 'manifest.json'
 $LauncherPath    = Join-Path $HomeDir '.local\bin\win-rice.cmd'
 
@@ -45,6 +46,21 @@ $LauncherPath    = Join-Path $HomeDir '.local\bin\win-rice.cmd'
 # palette block. Populated lazily by Get-ThemePalette so the picker doesn't
 # re-parse starship.toml every time it redraws.
 $script:PaletteCache = @{}
+
+# Update-check cache. The check is throttled to one network call per
+# UpdateThrottleHours. Between checks, the menu reads from a small JSON
+# cache file so it renders instantly without touching the network.
+#
+# Cache lives in ~/.windows-rice/ (state), not ~/.windows-rice-backup/
+# (backups). Purging backups shouldn't reset the throttle.
+$script:UpdateCachePath     = Join-Path $StateRoot 'update-check.json'
+$script:UpdateThrottleHours = 72
+$script:UpdateState         = $null   # populated by Initialize-UpdateState
+
+# Banner suppression. The full banner prints once per session; every
+# subsequent redraw shows a one-line compact header. Keeps the screen from
+# feeling like it's mostly logo.
+$script:BannerShown = $false
 
 try {
     [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
@@ -85,6 +101,25 @@ function Write-Banner {
     Write-Host ''
     Write-Host ('─' * 62) -ForegroundColor DarkMagenta
     Write-Host '  A Windows 10/11 rice, installed and managed in one place.' -ForegroundColor Gray
+    Write-Host ''
+
+    $script:BannerShown = $true
+}
+
+function Write-CompactHeader {
+    <#
+        One-line header shown on redraws after the first banner. Keeps the
+        screen anchored without repeating the eight-row art block.
+    #>
+    param([string]$Theme = '')
+    Write-Host ''
+    Write-Host '  WINDOWS-RICE' -NoNewline -ForegroundColor Magenta
+    if ($Theme) {
+        Write-Host '  ·  ' -NoNewline -ForegroundColor DarkGray
+        Write-Host "theme: $Theme" -NoNewline -ForegroundColor Cyan
+    }
+    Write-Host '  ·  ' -NoNewline -ForegroundColor DarkGray
+    Write-Host "v$script:RiceVersion" -ForegroundColor DarkGray
     Write-Host ''
 }
 
@@ -132,7 +167,7 @@ function Write-MenuItem {
         [string]$Hint = '',
         [string]$NumberColor = 'Cyan',
         [string]$LabelColor = 'White',
-        [string]$HintColor = 'Gray',
+        [string]$HintColor = 'DarkGray',
         [int]$LabelWidth = 22
     )
     Write-Host ('    ' + $Number.PadRight(4)) -NoNewline -ForegroundColor $NumberColor
@@ -146,7 +181,7 @@ function Write-MenuItem {
 
 function Write-Hint {
     param([string]$Text)
-    Write-Host "  $Text" -ForegroundColor Gray
+    Write-Host "  $Text" -ForegroundColor DarkGray
 }
 
 function Write-Warn {
@@ -174,7 +209,7 @@ function Write-Info {
 function Write-Swatch {
     <#
         Print a 3-cell block of the given hex color using ANSI truecolor.
-        Falls back to a dim "xxx" if the hex is malformed, so alignment is
+        Falls back to spaces if the hex is malformed, so alignment is
         preserved even when the palette data is bad.
     #>
     param([string]$Hex)
@@ -200,6 +235,9 @@ function Get-ThemePalette {
         configs/starship/starship.toml for the mocha base theme. The file
         declares its palette via `palette = '<name>'` and defines the
         matching [palettes.<name>] block further down.
+
+        Regex accepts single or double quotes on both the palette name and
+        the hex values, so a reformatted starship.toml still parses.
 
         Results are cached in $script:PaletteCache for the session.
     #>
@@ -228,16 +266,13 @@ function Get-ThemePalette {
     try {
         $content = Get-Content -LiteralPath $tomlPath -Raw -ErrorAction Stop
 
-        # Which palette does this file select?
-        $paletteMatch = [regex]::Match($content, "palette\s*=\s*'([^']+)'")
+        $paletteMatch = [regex]::Match($content, "palette\s*=\s*['`"]([^'`"]+)['`"]")
         if (-not $paletteMatch.Success) {
             $script:PaletteCache[$ThemeName] = $empty
             return $empty
         }
         $paletteName = $paletteMatch.Groups[1].Value
 
-        # Extract the [palettes.<name>] block: everything between that
-        # header and the next line starting with '['.
         $headerPattern = '\[palettes\.' + [regex]::Escape($paletteName) + '\]'
         $headerMatch  = [regex]::Match($content, $headerPattern)
         if (-not $headerMatch.Success) {
@@ -254,13 +289,12 @@ function Get-ThemePalette {
             $remainder
         }
 
-        # Extract the three colors, in order.
         $keys   = @('red', 'yellow', 'sapphire', 'blue')
         $picked = @()
 
         foreach ($key in $keys) {
             if ($picked.Count -ge 3) { break }
-            $colorMatch = [regex]::Match($block, '(?m)^' + $key + '\s*=\s*"(#[0-9a-fA-F]{6})"')
+            $colorMatch = [regex]::Match($block, '(?m)^' + $key + '\s*=\s*[''`"](#[0-9a-fA-F]{6})[''`"]')
             if ($colorMatch.Success) {
                 $picked += $colorMatch.Groups[1].Value
             }
@@ -272,6 +306,123 @@ function Get-ThemePalette {
         $script:PaletteCache[$ThemeName] = $empty
         return $empty
     }
+}
+
+# ========================================================== UPDATE CHECK
+
+function Read-UpdateCache {
+    if (-not (Test-Path -LiteralPath $script:UpdateCachePath)) { return $null }
+    try {
+        $raw  = Get-Content -LiteralPath $script:UpdateCachePath -Raw -ErrorAction Stop
+        $data = $raw | ConvertFrom-Json -ErrorAction Stop
+        if ($null -eq $data.checkedAt -or $null -eq $data.behind) { return $null }
+        return [PSCustomObject]@{
+            CheckedAt = [datetime]::Parse($data.checkedAt).ToUniversalTime()
+            Behind    = [int]$data.behind
+        }
+    } catch {
+        return $null
+    }
+}
+
+function Write-UpdateCache {
+    param([Parameter(Mandatory)][int]$Behind)
+    try {
+        if (-not (Test-Path -LiteralPath $StateRoot)) {
+            New-Item -ItemType Directory -Path $StateRoot -Force | Out-Null
+        }
+        $data = [ordered]@{
+            checkedAt = (Get-Date).ToUniversalTime().ToString('o')
+            behind    = $Behind
+        }
+        $data | ConvertTo-Json -Depth 5 |
+            Set-Content -LiteralPath $script:UpdateCachePath -Encoding UTF8 -ErrorAction Stop
+    } catch {
+        # Non-fatal. The notification just won't appear next session.
+    }
+}
+
+function Test-UpdateCacheFresh {
+    param($Cache)
+    if ($null -eq $Cache) { return $false }
+    $age = (Get-Date).ToUniversalTime() - $Cache.CheckedAt
+    return ($age.TotalHours -lt $script:UpdateThrottleHours)
+}
+
+function Update-UpdateCache {
+    <#
+        Run a git fetch and compare local HEAD against origin/main. Writes
+        the result to the cache file. Returns the fresh state object, or
+        $null on any failure (no git, not a repo, network down, etc.).
+    #>
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return $null }
+    if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot '.git'))) { return $null }
+
+    try {
+        & git -C $RepoRoot fetch origin --quiet 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { return $null }
+
+        $behindRaw = (& git -C $RepoRoot rev-list --count HEAD..origin/main 2>&1 | Out-String).Trim()
+        $behind = 0
+        if (-not [int]::TryParse($behindRaw, [ref]$behind)) { return $null }
+
+        Write-UpdateCache -Behind $behind
+        return [PSCustomObject]@{
+            CheckedAt = (Get-Date).ToUniversalTime()
+            Behind    = $behind
+        }
+    } catch {
+        return $null
+    }
+}
+
+function Initialize-UpdateState {
+    <#
+        Called once at startup, before the main loop. If the cache is fresh,
+        populates $script:UpdateState from disk with no network call. If the
+        cache is stale or missing, prints a visible "Checking..." message
+        and runs the fetch — this is the one place a pause can happen, and
+        the user gets told why.
+
+        On failure, falls back to the stale cache so the previous
+        "behind" value is preserved.
+    #>
+    $cache = Read-UpdateCache
+
+    if (Test-UpdateCacheFresh -Cache $cache) {
+        $script:UpdateState = $cache
+        return
+    }
+
+    Write-Host '  Checking for updates...' -ForegroundColor DarkGray
+    $fresh = Update-UpdateCache
+    Write-Host ''
+
+    if ($null -ne $fresh) {
+        $script:UpdateState = $fresh
+        return
+    }
+
+    $script:UpdateState = $cache
+}
+
+function Format-TimeAgo {
+    param([Parameter(Mandatory)][datetime]$When)
+    $delta = (Get-Date).ToUniversalTime() - $When
+    if ($delta.TotalMinutes -lt 1) { return 'just now' }
+    if ($delta.TotalMinutes -lt 60) {
+        $m = [int]$delta.TotalMinutes
+        $noun = if ($m -eq 1) { 'minute' } else { 'minutes' }
+        return "$m $noun ago"
+    }
+    if ($delta.TotalHours -lt 24) {
+        $h = [int]$delta.TotalHours
+        $noun = if ($h -eq 1) { 'hour' } else { 'hours' }
+        return "$h $noun ago"
+    }
+    $d = [int]$delta.TotalDays
+    $noun = if ($d -eq 1) { 'day' } else { 'days' }
+    return "$d $noun ago"
 }
 
 # ================================================================ INPUT
@@ -291,7 +442,7 @@ function Confirm-Yes {
     $suffix = if ($Default) { '[Y/n]' } else { '[y/N]' }
     Write-Host ''
     Write-Host "  $Prompt " -NoNewline -ForegroundColor Gray
-    Write-Host $suffix -NoNewline -ForegroundColor Gray
+    Write-Host $suffix -NoNewline -ForegroundColor DarkGray
     Write-Host ' ' -NoNewline
     $answer = (Read-Host).Trim()
     if ([string]::IsNullOrEmpty($answer)) { return $Default }
@@ -301,7 +452,7 @@ function Confirm-Yes {
 function Wait-ForEnter {
     param([string]$Message = 'Press Enter to return to the menu')
     Write-Host ''
-    Write-Host "  $Message..." -ForegroundColor Gray
+    Write-Host "  $Message..." -ForegroundColor DarkGray
     [void](Read-Host)
 }
 
@@ -470,7 +621,11 @@ function Show-MainMenu {
     param([Parameter(Mandatory)]$State)
 
     Clear-Host
-    Write-Banner
+    if (-not $script:BannerShown) {
+        Write-Banner
+    } else {
+        Write-CompactHeader -Theme $State.Theme
+    }
 
     if (-not $State.ManifestOk -and (Test-Path -LiteralPath $ManifestPath)) {
         Write-Warn 'Manifest exists but could not be read. Treating as not installed.'
@@ -482,6 +637,16 @@ function Show-MainMenu {
         Write-KeyValue -Key 'Theme'      -Value $State.Theme -KeyWidth 14 -ValueColor 'Cyan'
         if ($State.LastUpdated) {
             Write-KeyValue -Key 'Updated' -Value $State.LastUpdated -KeyWidth 14
+        }
+
+        # $script:UpdateState is populated once at startup by
+        # Initialize-UpdateState. Show-MainMenu reads it; it never fetches.
+        if ($null -ne $script:UpdateState -and $script:UpdateState.Behind -gt 0) {
+            $n = $script:UpdateState.Behind
+            $noun = if ($n -eq 1) { 'commit' } else { 'commits' }
+            Write-Host '    ' -NoNewline
+            Write-Host '[!]'.PadRight(14) -NoNewline -ForegroundColor Yellow
+            Write-Host "Update available - $n $noun behind" -ForegroundColor Yellow
         }
     } else {
         Write-KeyValue -Key 'Repository' -Value $RepoRoot -KeyWidth 14
@@ -508,7 +673,7 @@ function Show-MainMenu {
     }
 
     Write-Host ''
-    Write-MenuItem -Number '0' -Label 'Exit' -NumberColor 'Gray' -LabelColor 'Gray'
+    Write-MenuItem -Number '0' -Label 'Exit' -NumberColor 'DarkGray' -LabelColor 'DarkGray' -HintColor 'DarkGray'
     Write-Host ''
 }
 
@@ -548,7 +713,6 @@ function Show-ThemePicker {
             Write-Swatch -Hex $palette[2]
             Write-Host '  ' -NoNewline
         } else {
-            # Reserve the same 13 columns (3 swatches of 3 + 2 gaps + 2 gap).
             Write-Host (' ' * 13) -NoNewline
         }
 
@@ -563,8 +727,8 @@ function Show-ThemePicker {
     }
 
     Write-Host ''
-    Write-Host '    0  ' -NoNewline -ForegroundColor Gray
-    Write-Host 'Cancel' -ForegroundColor Gray
+    Write-Host '    0  ' -NoNewline -ForegroundColor DarkGray
+    Write-Host 'Cancel' -ForegroundColor DarkGray
     Write-Host ''
 }
 
@@ -589,6 +753,24 @@ function Show-Status {
     if ($State.Created)     { Write-KeyValue -Key 'Installed'   -Value $State.Created -KeyWidth 16 }
     if ($State.LastUpdated) { Write-KeyValue -Key 'Last updated' -Value $State.LastUpdated -KeyWidth 16 }
     Write-KeyValue -Key 'Repository'     -Value $RepoRoot -KeyWidth 16
+
+    # ---- Updates ---------------------------------------------------------
+    Write-SectionBox 'Updates'
+
+    if ($null -eq $script:UpdateState) {
+        Write-KeyValue -Key 'Status' -Value 'Unknown' -KeyWidth 16 -ValueColor 'Gray'
+        Write-Host ''
+        Write-Hint 'No update check has run yet. Press u below to check now.'
+    } else {
+        Write-KeyValue -Key 'Last checked' -Value (Format-TimeAgo -When $script:UpdateState.CheckedAt) -KeyWidth 16
+        if ($script:UpdateState.Behind -eq 0) {
+            Write-KeyValue -Key 'Status' -Value 'Up to date' -KeyWidth 16 -ValueColor 'Green'
+        } else {
+            $n = $script:UpdateState.Behind
+            $noun = if ($n -eq 1) { 'commit' } else { 'commits' }
+            Write-KeyValue -Key 'Status' -Value "Behind by $n $noun" -KeyWidth 16 -ValueColor 'Yellow'
+        }
+    }
 
     # ---- Deployed configs ------------------------------------------------
     $docsDir = [Environment]::GetFolderPath('MyDocuments')
@@ -627,7 +809,13 @@ function Show-Status {
         } catch {}
     }
 
-    Write-KeyValue -Key 'Backup root' -Value ("$BackupRoot  ($backupSizeMB MB)") -KeyWidth 16
+    $backupValue = if ($backupSizeMB -gt 0) {
+        "$BackupRoot  ($backupSizeMB MB)"
+    } else {
+        $BackupRoot
+    }
+
+    Write-KeyValue -Key 'Backup root' -Value $backupValue -KeyWidth 16
     Write-KeyValue -Key 'Manifest'    -Value ("manifest.json  ($($State.ManifestSizeKB) KB)") -KeyWidth 16
 
     $launcherExists = Test-Path -LiteralPath $LauncherPath
@@ -748,6 +936,12 @@ function Invoke-Update {
     Write-Host ''
     if ($exit -eq 0) {
         Write-Ok 'Update completed.'
+
+        # Refresh the update cache so the menu doesn't show a stale
+        # "behind" notification on the next draw.
+        $script:UpdateState = $null
+        $fresh = Update-UpdateCache
+        if ($null -ne $fresh) { $script:UpdateState = $fresh }
     } else {
         Write-Err "Update exited with code $exit."
     }
@@ -755,9 +949,48 @@ function Invoke-Update {
 }
 
 function Invoke-Status {
+    <#
+        Status screen with an optional force-check keybinding. Pressing 'u'
+        runs an immediate git fetch and refreshes the update cache, then
+        redraws. Enter or any other input returns to the menu.
+    #>
     $state = Get-RiceState
-    Show-Status -State $state
-    Wait-ForEnter
+
+    while ($true) {
+        Show-Status -State $state
+
+        Write-Host ''
+        Write-Host '  ' -NoNewline
+        Write-Host 'Enter' -NoNewline -ForegroundColor Cyan
+        Write-Host ' to return, or ' -NoNewline -ForegroundColor Gray
+        Write-Host 'u' -NoNewline -ForegroundColor Cyan
+        Write-Host ' to check for updates now.' -ForegroundColor Gray
+
+        Write-Host ''
+        Write-Host '  > ' -NoNewline -ForegroundColor Cyan
+        $input = (Read-Host).Trim().ToLower()
+
+        if ($input -eq 'u') {
+            Write-Host ''
+            Write-Host '  Checking for updates...' -ForegroundColor Gray
+
+            $fresh = Update-UpdateCache
+            if ($null -eq $fresh) {
+                Write-Host '  Check failed (no network, or not a git repo).' -ForegroundColor Yellow
+                Start-Sleep -Seconds 2
+            } else {
+                $script:UpdateState = $fresh
+                if ($fresh.Behind -eq 0) {
+                    Write-Host '  Up to date.' -ForegroundColor Green
+                } else {
+                    Write-Host "  Behind by $($fresh.Behind)." -ForegroundColor Yellow
+                }
+                Start-Sleep -Seconds 1
+            }
+        } else {
+            return
+        }
+    }
 }
 
 function Invoke-CreateTheme {
@@ -778,7 +1011,7 @@ function Invoke-CreateTheme {
     }
     Write-Host ''
     Write-Host '    New theme name ' -NoNewline -ForegroundColor Gray
-    Write-Host '(lowercase, digits, hyphens, underscores)' -ForegroundColor Gray
+    Write-Host '(lowercase, digits, hyphens, underscores)' -ForegroundColor DarkGray
     Write-Host '    > ' -NoNewline -ForegroundColor Cyan
     $newName = (Read-Host).Trim()
 
@@ -814,24 +1047,24 @@ function Invoke-CreateTheme {
         $sourceWallpaperDir = Join-Path $sourceDir 'wallpapers'
     }
 
-    # ---- Wallpaper prompt (singular-aware, with "add your own later" hint) ----
+    # Wallpaper prompt — hint fires AFTER the prompt so it's a footnote, not
+    # a preamble the user has to read past to find the actual question.
     $copyWallpapers = $false
     if (Test-Path -LiteralPath $sourceWallpaperDir) {
         $wpFiles = @(Get-ChildItem -LiteralPath $sourceWallpaperDir -File -ErrorAction SilentlyContinue)
         if ($wpFiles.Count -gt 0) {
             $wpSizeMB = [math]::Round((($wpFiles | Measure-Object Length -Sum).Sum / 1MB), 1)
             $wpNoun   = if ($wpFiles.Count -eq 1) { 'wallpaper' } else { 'wallpapers' }
-            Write-Hint 'You can add your own wallpapers later either way.'
             $copyWallpapers = Confirm-Yes `
                 -Prompt "Copy $($wpFiles.Count) $wpNoun from '$source' (~$wpSizeMB MB)?" `
                 -Default $false
+            Write-Hint 'You can add your own wallpapers later either way.'
         }
     }
 
     Write-Host ''
     Write-Info "Creating themes\$newName\ from $source..."
 
-    # ---- Copy, with cleanup on failure ------------------------------------
     try {
         New-Item -ItemType Directory -Path $newDir -Force | Out-Null
 
@@ -854,7 +1087,6 @@ function Invoke-CreateTheme {
         Write-Host ''
         Write-Err "Failed to create theme: $_"
 
-        # Attempt to clean up the partial folder so a retry can reuse the name.
         try {
             if (Test-Path -LiteralPath $newDir) {
                 Remove-Item -LiteralPath $newDir -Recurse -Force -ErrorAction Stop
@@ -868,7 +1100,6 @@ function Invoke-CreateTheme {
         return
     }
 
-    # ---- Count what actually landed ---------------------------------------
     $fileCount = 0
     $wpCount   = 0
     try {
@@ -884,7 +1115,6 @@ function Invoke-CreateTheme {
 
     $sourceLabel = if ($sourceInfo.IsBase) { 'mocha (base configs)' } else { $source }
 
-    # ---- Success screen ---------------------------------------------------
     Clear-Host
     Write-SectionBox 'Theme created'
 
@@ -967,6 +1197,11 @@ function Invoke-Uninstall {
 # ================================================================== MAIN LOOP
 
 Assert-RepoLayout
+
+# Run the update check once, before the loop. If the cache is stale, this
+# is where the fetch happens — and where the user sees a "Checking..."
+# message rather than a mysterious pause.
+Initialize-UpdateState
 
 try {
     :mainLoop while ($true) {
