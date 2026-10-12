@@ -40,6 +40,12 @@ $BackupRoot      = Join-Path $HomeDir '.windows-rice-backup'
 $ManifestPath    = Join-Path $BackupRoot 'manifest.json'
 $LauncherPath    = Join-Path $HomeDir '.local\bin\win-rice.cmd'
 
+# Cache of palette lookups. Keyed by theme name; value is an array of hex
+# color strings (length 3) or an empty array when the theme has no usable
+# palette block. Populated lazily by Get-ThemePalette so the picker doesn't
+# re-parse starship.toml every time it redraws.
+$script:PaletteCache = @{}
+
 try {
     [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 } catch {}
@@ -110,8 +116,32 @@ function Write-KeyValue {
         [string]$ValueColor = 'Gray'
     )
     Write-Host '    ' -NoNewline
-    Write-Host $Key.PadRight($KeyWidth) -NoNewline -ForegroundColor DarkGray
+    Write-Host $Key.PadRight($KeyWidth) -NoNewline -ForegroundColor Gray
     Write-Host $Value -ForegroundColor $ValueColor
+}
+
+function Write-MenuItem {
+    <#
+        One row of a numbered menu: "N  Label          Hint".
+        Label is padded so hints align regardless of label length.
+        Number color can be overridden to flag destructive actions.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$Number,
+        [Parameter(Mandatory)][string]$Label,
+        [string]$Hint = '',
+        [string]$NumberColor = 'Cyan',
+        [string]$LabelColor = 'White',
+        [string]$HintColor = 'Gray',
+        [int]$LabelWidth = 22
+    )
+    Write-Host ('    ' + $Number.PadRight(4)) -NoNewline -ForegroundColor $NumberColor
+    Write-Host $Label.PadRight($LabelWidth) -NoNewline -ForegroundColor $LabelColor
+    if ($Hint) {
+        Write-Host $Hint -ForegroundColor $HintColor
+    } else {
+        Write-Host ''
+    }
 }
 
 function Write-Hint {
@@ -137,6 +167,111 @@ function Write-Ok {
 function Write-Info {
     param([string]$Text)
     Write-Host "  $Text" -ForegroundColor Gray
+}
+
+# ================================================================ SWATCHES
+
+function Write-Swatch {
+    <#
+        Print a 3-cell block of the given hex color using ANSI truecolor.
+        Falls back to a dim "xxx" if the hex is malformed, so alignment is
+        preserved even when the palette data is bad.
+    #>
+    param([string]$Hex)
+
+    if ($Hex -match '^#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$') {
+        $r = [Convert]::ToInt32($Matches[1], 16)
+        $g = [Convert]::ToInt32($Matches[2], 16)
+        $b = [Convert]::ToInt32($Matches[3], 16)
+        $esc = [char]27
+        Write-Host "${esc}[38;2;${r};${g};${b}m███${esc}[0m" -NoNewline
+    } else {
+        Write-Host '   ' -NoNewline
+    }
+}
+
+function Get-ThemePalette {
+    <#
+        Return an array of three hex color strings for the theme, in order:
+        red, yellow, sapphire (falling back to blue if sapphire is absent).
+        Returns an empty array when no usable palette exists.
+
+        Source: themes/<name>/starship/starship.toml, or
+        configs/starship/starship.toml for the mocha base theme. The file
+        declares its palette via `palette = '<name>'` and defines the
+        matching [palettes.<name>] block further down.
+
+        Results are cached in $script:PaletteCache for the session.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$ThemeName,
+        [switch]$IsBase
+    )
+
+    if ($script:PaletteCache.ContainsKey($ThemeName)) {
+        return $script:PaletteCache[$ThemeName]
+    }
+
+    $tomlPath = if ($IsBase) {
+        Join-Path $ConfigRoot 'starship\starship.toml'
+    } else {
+        Join-Path (Join-Path $ThemeRoot $ThemeName) 'starship\starship.toml'
+    }
+
+    $empty = @()
+
+    if (-not (Test-Path -LiteralPath $tomlPath)) {
+        $script:PaletteCache[$ThemeName] = $empty
+        return $empty
+    }
+
+    try {
+        $content = Get-Content -LiteralPath $tomlPath -Raw -ErrorAction Stop
+
+        # Which palette does this file select?
+        $paletteMatch = [regex]::Match($content, "palette\s*=\s*'([^']+)'")
+        if (-not $paletteMatch.Success) {
+            $script:PaletteCache[$ThemeName] = $empty
+            return $empty
+        }
+        $paletteName = $paletteMatch.Groups[1].Value
+
+        # Extract the [palettes.<name>] block: everything between that
+        # header and the next line starting with '['.
+        $headerPattern = '\[palettes\.' + [regex]::Escape($paletteName) + '\]'
+        $headerMatch  = [regex]::Match($content, $headerPattern)
+        if (-not $headerMatch.Success) {
+            $script:PaletteCache[$ThemeName] = $empty
+            return $empty
+        }
+
+        $startIdx   = $headerMatch.Index + $headerMatch.Length
+        $remainder  = $content.Substring($startIdx)
+        $endMatch   = [regex]::Match($remainder, '(?m)^\[')
+        $block      = if ($endMatch.Success) {
+            $remainder.Substring(0, $endMatch.Index)
+        } else {
+            $remainder
+        }
+
+        # Extract the three colors, in order.
+        $keys   = @('red', 'yellow', 'sapphire', 'blue')
+        $picked = @()
+
+        foreach ($key in $keys) {
+            if ($picked.Count -ge 3) { break }
+            $colorMatch = [regex]::Match($block, '(?m)^' + $key + '\s*=\s*"(#[0-9a-fA-F]{6})"')
+            if ($colorMatch.Success) {
+                $picked += $colorMatch.Groups[1].Value
+            }
+        }
+
+        $script:PaletteCache[$ThemeName] = $picked
+        return $picked
+    } catch {
+        $script:PaletteCache[$ThemeName] = $empty
+        return $empty
+    }
 }
 
 # ================================================================ INPUT
@@ -348,49 +483,43 @@ function Show-MainMenu {
         if ($State.LastUpdated) {
             Write-KeyValue -Key 'Updated' -Value $State.LastUpdated -KeyWidth 14
         }
-
-        Write-SectionBox 'Menu'
-
-        Write-Host '    1  ' -NoNewline -ForegroundColor Cyan
-        Write-Host 'Change theme' -NoNewline -ForegroundColor White
-        Write-Host '          Switch to a different look' -ForegroundColor DarkGray
-
-        Write-Host '    2  ' -NoNewline -ForegroundColor Cyan
-        Write-Host 'Update' -NoNewline -ForegroundColor White
-        Write-Host '                Pull latest and redeploy' -ForegroundColor DarkGray
-
-        Write-Host '    3  ' -NoNewline -ForegroundColor Cyan
-        Write-Host 'Status' -NoNewline -ForegroundColor White
-        Write-Host '                Show what''s installed' -ForegroundColor DarkGray
-
-        Write-Host '    4  ' -NoNewline -ForegroundColor Cyan
-        Write-Host 'Create a new theme' -NoNewline -ForegroundColor White
-        Write-Host '    Scaffold a theme folder' -ForegroundColor DarkGray
-
-        Write-Host '    5  ' -NoNewline -ForegroundColor Cyan
-        Write-Host 'Uninstall' -NoNewline -ForegroundColor White
-        Write-Host '             Restore configs, remove packages' -ForegroundColor DarkGray
-
-        Write-Host ''
-        Write-Host '    0  ' -NoNewline -ForegroundColor DarkGray
-        Write-Host 'Exit' -ForegroundColor DarkGray
     } else {
         Write-KeyValue -Key 'Repository' -Value $RepoRoot -KeyWidth 14
-
-        Write-SectionBox 'Menu'
-
-        Write-Host '    1  ' -NoNewline -ForegroundColor Cyan
-        Write-Host 'Install' -NoNewline -ForegroundColor White
-        Write-Host '    Set up Windows-Rice for the first time' -ForegroundColor DarkGray
-
-        Write-Host ''
-        Write-Host '    0  ' -NoNewline -ForegroundColor DarkGray
-        Write-Host 'Exit' -ForegroundColor DarkGray
     }
+
+    Write-SectionBox 'Menu'
+
+    $items = if ($State.Installed) {
+        @(
+            @{ Number = '1'; Label = 'Change theme';       Hint = 'Switch to a different look' }
+            @{ Number = '2'; Label = 'Update';             Hint = 'Pull latest and redeploy' }
+            @{ Number = '3'; Label = 'Status';             Hint = "Show what's installed" }
+            @{ Number = '4'; Label = 'Create a new theme'; Hint = 'Scaffold a theme folder' }
+            @{ Number = '5'; Label = 'Uninstall';          Hint = 'Restore configs, remove packages'; NumberColor = 'Red' }
+        )
+    } else {
+        @(
+            @{ Number = '1'; Label = 'Install'; Hint = 'Set up Windows-Rice for the first time' }
+        )
+    }
+
+    foreach ($item in $items) {
+        Write-MenuItem @item
+    }
+
+    Write-Host ''
+    Write-MenuItem -Number '0' -Label 'Exit' -NumberColor 'DarkGray' -LabelColor 'DarkGray'
     Write-Host ''
 }
 
 function Show-ThemePicker {
+    <#
+        Renders the theme list with name, three-color swatch, and description.
+        Swatches are drawn with ANSI truecolor from each theme's own
+        starship.toml palette block (red / yellow / sapphire). Themes without
+        a usable palette show a text-only row, aligned as if the swatches
+        were present, so columns don't jump between rows.
+    #>
     param(
         [Parameter(Mandatory)]$Themes,
         [string]$CurrentTheme = '',
@@ -406,9 +535,24 @@ function Show-ThemePicker {
         $numColor  = if ($isCurrent) { 'Green' } else { 'Cyan' }
         $nameColor = if ($isCurrent) { 'Green' } else { 'White' }
 
+        $palette = Get-ThemePalette -ThemeName $t.Name -IsBase:$t.IsBase
+
         Write-Host ('    ' + $i.ToString().PadRight(4)) -NoNewline -ForegroundColor $numColor
-        Write-Host $t.Name.PadRight(14) -NoNewline -ForegroundColor $nameColor
-        Write-Host $t.Description -NoNewline -ForegroundColor DarkGray
+        Write-Host $t.Name.PadRight(12) -NoNewline -ForegroundColor $nameColor
+
+        if ($palette.Count -ge 3) {
+            Write-Swatch -Hex $palette[0]
+            Write-Host ' ' -NoNewline
+            Write-Swatch -Hex $palette[1]
+            Write-Host ' ' -NoNewline
+            Write-Swatch -Hex $palette[2]
+            Write-Host '  ' -NoNewline
+        } else {
+            # Reserve the same 13 columns (3 swatches of 3 + 2 gaps + 2 gap).
+            Write-Host (' ' * 13) -NoNewline
+        }
+
+        Write-Host $t.Description -NoNewline -ForegroundColor Gray
 
         if ($isCurrent) {
             Write-Host '  (current)' -ForegroundColor Green
@@ -462,13 +606,12 @@ function Show-Status {
     Write-SectionBox 'Deployed configs'
     foreach ($p in $paths) {
         $exists = Test-Path -LiteralPath $p.Path
-        $mark   = if ($exists) { '[ok]' } else { '[  ]' }
-        $markColor = if ($exists) { 'Green' } else { 'DarkGray' }
-        $labelColor = if ($exists) { 'Gray' } else { 'DarkGray' }
+        $mark      = if ($exists) { '[ok]' } else { '[  ]' }
+        $markColor = if ($exists) { 'Green' } else { 'Yellow' }
 
         Write-Host '    ' -NoNewline
         Write-Host $mark.PadRight(7) -NoNewline -ForegroundColor $markColor
-        Write-Host $p.Label.PadRight(22) -NoNewline -ForegroundColor $labelColor
+        Write-Host $p.Label.PadRight(22) -NoNewline -ForegroundColor Gray
         Write-Host $p.Display -ForegroundColor DarkGray
     }
 
@@ -627,7 +770,12 @@ function Invoke-CreateTheme {
 
     Clear-Host
     Write-SectionBox 'Create theme'
-    Write-Info "Source: $source"
+
+    if ($sourceInfo.IsBase) {
+        Write-Info "Source: mocha (base configs — your theme starts as a copy of the default look)"
+    } else {
+        Write-Info "Source: $source"
+    }
     Write-Host ''
     Write-Host '    New theme name ' -NoNewline -ForegroundColor DarkGray
     Write-Host '(lowercase, digits, hyphens, underscores)' -ForegroundColor DarkGray
@@ -666,18 +814,24 @@ function Invoke-CreateTheme {
         $sourceWallpaperDir = Join-Path $sourceDir 'wallpapers'
     }
 
+    # ---- Wallpaper prompt (singular-aware, with "add your own later" hint) ----
     $copyWallpapers = $false
     if (Test-Path -LiteralPath $sourceWallpaperDir) {
         $wpFiles = @(Get-ChildItem -LiteralPath $sourceWallpaperDir -File -ErrorAction SilentlyContinue)
         if ($wpFiles.Count -gt 0) {
             $wpSizeMB = [math]::Round((($wpFiles | Measure-Object Length -Sum).Sum / 1MB), 1)
-            $copyWallpapers = Confirm-Yes -Prompt "Copy $($wpFiles.Count) wallpapers from '$source' (~$wpSizeMB MB)?" -Default $false
+            $wpNoun   = if ($wpFiles.Count -eq 1) { 'wallpaper' } else { 'wallpapers' }
+            Write-Hint 'You can add your own wallpapers later either way.'
+            $copyWallpapers = Confirm-Yes `
+                -Prompt "Copy $($wpFiles.Count) $wpNoun from '$source' (~$wpSizeMB MB)?" `
+                -Default $false
         }
     }
 
     Write-Host ''
     Write-Info "Creating themes\$newName\ from $source..."
 
+    # ---- Copy, with cleanup on failure ------------------------------------
     try {
         New-Item -ItemType Directory -Path $newDir -Force | Out-Null
 
@@ -699,16 +853,49 @@ function Invoke-CreateTheme {
     } catch {
         Write-Host ''
         Write-Err "Failed to create theme: $_"
+
+        # Attempt to clean up the partial folder so a retry can reuse the name.
+        try {
+            if (Test-Path -LiteralPath $newDir) {
+                Remove-Item -LiteralPath $newDir -Recurse -Force -ErrorAction Stop
+                Write-Hint 'Partial folder cleaned up.'
+            }
+        } catch {
+            Write-Warn "Could not clean up $newDir - remove it manually before retrying."
+        }
+
         Wait-ForEnter
         return
     }
 
+    # ---- Count what actually landed ---------------------------------------
+    $fileCount = 0
+    $wpCount   = 0
+    try {
+        $fileCount = @(Get-ChildItem -LiteralPath $newDir -Recurse -File -ErrorAction SilentlyContinue).Count
+        $wpDir     = Join-Path $newDir 'wallpapers'
+        if (Test-Path -LiteralPath $wpDir) {
+            $wpCount = @(Get-ChildItem -LiteralPath $wpDir -File -ErrorAction SilentlyContinue).Count
+        }
+    } catch {}
+
+    $configCount = $fileCount - $wpCount
+    if ($configCount -lt 0) { $configCount = 0 }
+
+    $sourceLabel = if ($sourceInfo.IsBase) { 'mocha (base configs)' } else { $source }
+
+    # ---- Success screen ---------------------------------------------------
     Clear-Host
     Write-SectionBox 'Theme created'
+
     Write-Host ''
-    Write-Ok $newName
+    Write-Ok "Theme '$newName' created."
     Write-Host ''
-    Write-KeyValue -Key 'Location' -Value $newDir -KeyWidth 12
+
+    Write-KeyValue -Key 'Location'   -Value $newDir -KeyWidth 14
+    Write-KeyValue -Key 'Based on'   -Value $sourceLabel -KeyWidth 14
+    Write-KeyValue -Key 'Configs'    -Value "$configCount files" -KeyWidth 14
+    Write-KeyValue -Key 'Wallpapers' -Value $(if ($wpCount -eq 0) { 'none (add your own)' } else { "$wpCount files" }) -KeyWidth 14
 
     Write-SectionBox 'Colors — start here'
     Write-Host '    yasb\styles.css              Bar colors, spacing, fonts' -ForegroundColor Gray
@@ -782,7 +969,7 @@ function Invoke-Uninstall {
 Assert-RepoLayout
 
 try {
-    while ($true) {
+    :mainLoop while ($true) {
         $state = Get-RiceState
         Show-MainMenu -State $state
 
@@ -790,7 +977,7 @@ try {
 
         if ($state.Installed) {
             switch ($choice) {
-                '0' { break }
+                '0' { break mainLoop }
                 '1' { Invoke-ChangeTheme }
                 '2' { Invoke-Update }
                 '3' { Invoke-Status }
@@ -805,7 +992,7 @@ try {
             }
         } else {
             switch ($choice) {
-                '0' { break }
+                '0' { break mainLoop }
                 '1' { Invoke-Install }
                 default {
                     if ($choice -ne '') {
