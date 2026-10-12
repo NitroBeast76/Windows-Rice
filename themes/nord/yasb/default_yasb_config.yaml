@@ -36,11 +36,8 @@ bars:
     widgets:
       left:
       - home
-      - lines
       - glazewm_tiling_direction
-      - lines
       - glazewm_workspaces
-      - lines
       - quick_launch
       - active_window
       center:
@@ -49,15 +46,11 @@ bars:
       - media
       right:
       - systray
-      - lines
       - wifi
       - bluetooth
       - battery
-      - lines
       - wallpapers
-      - lines
       - volume
-      - lines
       - notifications
       - language
       - control_center
