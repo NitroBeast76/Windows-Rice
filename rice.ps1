@@ -28,6 +28,8 @@ $ErrorActionPreference = 'Stop'
 
 # ============================================================ INITIALIZATION
 
+$script:RiceVersion = '1.4'
+
 $RepoRoot        = if ($PSScriptRoot) { $PSScriptRoot } else { (Get-Location).Path }
 $ThemeRoot       = Join-Path $RepoRoot 'themes'
 $ConfigRoot      = Join-Path $RepoRoot 'configs'
@@ -36,19 +38,80 @@ $UninstallScript = Join-Path $RepoRoot 'uninstall.ps1'
 $HomeDir         = $env:USERPROFILE
 $BackupRoot      = Join-Path $HomeDir '.windows-rice-backup'
 $ManifestPath    = Join-Path $BackupRoot 'manifest.json'
+$LauncherPath    = Join-Path $HomeDir '.local\bin\win-rice.cmd'
 
 try {
     [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 } catch {}
 
-# ================================================================== HELPERS
+# ================================================================== LOGGING
 
-function Write-Header {
+$script:BoxWidth = 56
+
+function Write-Banner {
+    <#
+        Block art spells WINDOWS (figlet ansi_shadow, 58 cols). RICE is a
+        right-aligned accent line beneath, colored Cyan to match section
+        labels. Below that, a magenta rule and a one-line tagline.
+
+        Kept identical to install.ps1's banner so the two scripts read as
+        parts of one product rather than two unrelated tools.
+    #>
+    $art = @(
+        '██╗    ██╗██╗███╗   ██╗██████╗  ██████╗ ██╗    ██╗███████╗',
+        '██║    ██║██║████╗  ██║██╔══██╗██╔═══██╗██║    ██║██╔════╝',
+        '██║ █╗ ██║██║██╔██╗ ██║██║  ██║██║   ██║██║ █╗ ██║███████╗',
+        '██║███╗██║██║██║╚██╗██║██║  ██║██║   ██║██║███╗██║╚════██║',
+        '╚███╔███╔╝██║██║ ╚████║██████╔╝╚██████╔╝╚███╔███╔╝███████║',
+        ' ╚══╝╚══╝ ╚═╝╚═╝  ╚═══╝╚═════╝  ╚═════╝  ╚══╝╚══╝ ╚══════╝'
+    )
+
+    Write-Host ''
+    foreach ($line in $art) {
+        Write-Host $line -ForegroundColor Magenta
+    }
+
+    $riceLine = '──── R I C E  v' + $script:RiceVersion
+    $padding  = 58 - $riceLine.Length
+    if ($padding -lt 0) { $padding = 0 }
+    Write-Host ((' ' * $padding) + $riceLine) -ForegroundColor Cyan
+
+    Write-Host ''
+    Write-Host ('─' * 62) -ForegroundColor DarkMagenta
+    Write-Host '  A Windows 10/11 rice, installed and managed in one place.' -ForegroundColor DarkGray
+    Write-Host ''
+}
+
+function Write-SectionBox {
+    <#
+        Two-row section header matching install.ps1's Write-Section.
+        Rounded box, title in Cyan, borders in DarkCyan.
+    #>
     param([string]$Title)
+
+    $label = " $($Title.ToUpper()) "
+    $pad   = $script:BoxWidth - $label.Length
+    if ($pad -lt 0) { $pad = 0 }
+
     Write-Host ''
-    Write-Host "  $Title" -ForegroundColor Cyan
-    Write-Host ('  ' + ('-' * ($Title.Length))) -ForegroundColor DarkCyan
+    Write-Host ('  ╭' + ('─' * $script:BoxWidth) + '╮') -ForegroundColor DarkCyan
+    Write-Host '  │' -NoNewline -ForegroundColor DarkCyan
+    Write-Host ($label + (' ' * $pad)) -NoNewline -ForegroundColor Cyan
+    Write-Host '│' -ForegroundColor DarkCyan
+    Write-Host ('  ╰' + ('─' * $script:BoxWidth) + '╯') -ForegroundColor DarkCyan
     Write-Host ''
+}
+
+function Write-KeyValue {
+    param(
+        [string]$Key,
+        [string]$Value,
+        [int]$KeyWidth = 14,
+        [string]$ValueColor = 'Gray'
+    )
+    Write-Host '    ' -NoNewline
+    Write-Host $Key.PadRight($KeyWidth) -NoNewline -ForegroundColor DarkGray
+    Write-Host $Value -ForegroundColor $ValueColor
 }
 
 function Write-Hint {
@@ -71,10 +134,17 @@ function Write-Ok {
     Write-Host "  [ok] $Text" -ForegroundColor Green
 }
 
+function Write-Info {
+    param([string]$Text)
+    Write-Host "  $Text" -ForegroundColor Gray
+}
+
+# ================================================================ INPUT
+
 function Read-Choice {
     param([string]$Prompt = 'Choice')
     Write-Host ''
-    Write-Host "  $Prompt (or 0 to cancel): " -NoNewline -ForegroundColor Gray
+    Write-Host "  $Prompt > " -NoNewline -ForegroundColor Cyan
     return (Read-Host).Trim()
 }
 
@@ -85,15 +155,18 @@ function Confirm-Yes {
     )
     $suffix = if ($Default) { '[Y/n]' } else { '[y/N]' }
     Write-Host ''
-    Write-Host "  $Prompt $suffix " -NoNewline -ForegroundColor Gray
+    Write-Host "  $Prompt " -NoNewline -ForegroundColor Gray
+    Write-Host $suffix -NoNewline -ForegroundColor DarkGray
+    Write-Host ' ' -NoNewline
     $answer = (Read-Host).Trim()
     if ([string]::IsNullOrEmpty($answer)) { return $Default }
     return ($answer -match '^(y|yes)$')
 }
 
 function Wait-ForEnter {
+    param([string]$Message = 'Press Enter to return to the menu')
     Write-Host ''
-    Write-Host '  Press Enter to return to the menu...' -ForegroundColor DarkGray
+    Write-Host "  $Message..." -ForegroundColor DarkGray
     [void](Read-Host)
 }
 
@@ -107,7 +180,8 @@ function Assert-RepoLayout {
     if (-not (Test-Path -LiteralPath $ConfigRoot))      { $missing += 'configs\' }
 
     if ($missing.Count -gt 0) {
-        Write-Host ''
+        Clear-Host
+        Write-Banner
         Write-Err 'Repository is incomplete. Missing:'
         foreach ($m in $missing) { Write-Host "        - $m" -ForegroundColor Red }
         Write-Host ''
@@ -122,15 +196,20 @@ function Assert-RepoLayout {
 
 function Get-RiceState {
     $state = [PSCustomObject]@{
-        Installed   = $false
-        Theme       = ''
-        LastUpdated = ''
-        ManifestOk  = $true
+        Installed      = $false
+        Theme          = ''
+        Created        = ''
+        LastUpdated    = ''
+        ManifestOk     = $true
+        ManifestSizeKB = 0
     }
 
     if (-not (Test-Path -LiteralPath $ManifestPath)) { return $state }
 
     try {
+        $fileInfo = Get-Item -LiteralPath $ManifestPath -ErrorAction Stop
+        $state.ManifestSizeKB = [math]::Round($fileInfo.Length / 1KB, 1)
+
         $raw  = Get-Content -LiteralPath $ManifestPath -Raw -ErrorAction Stop
         $json = $raw | ConvertFrom-Json -ErrorAction Stop
     } catch {
@@ -144,6 +223,15 @@ function Get-RiceState {
         $state.Theme = $json.preferences.theme
     }
     if (-not $state.Theme) { $state.Theme = 'mocha' }
+
+    if ($json.created) {
+        try {
+            $dt = [datetime]::Parse($json.created).ToLocalTime()
+            $state.Created = $dt.ToString('yyyy-MM-dd')
+        } catch {
+            $state.Created = ''
+        }
+    }
 
     if ($json.updated) {
         try {
@@ -247,10 +335,7 @@ function Show-MainMenu {
     param([Parameter(Mandatory)]$State)
 
     Clear-Host
-    Write-Host ''
-    Write-Host '  Windows-Rice' -ForegroundColor Magenta
-    Write-Host '  ============' -ForegroundColor Magenta
-    Write-Host ''
+    Write-Banner
 
     if (-not $State.ManifestOk -and (Test-Path -LiteralPath $ManifestPath)) {
         Write-Warn 'Manifest exists but could not be read. Treating as not installed.'
@@ -258,22 +343,49 @@ function Show-MainMenu {
     }
 
     if ($State.Installed) {
-        Write-Host "  Current theme: $($State.Theme)" -ForegroundColor Gray
+        Write-KeyValue -Key 'Repository' -Value $RepoRoot -KeyWidth 14
+        Write-KeyValue -Key 'Theme'      -Value $State.Theme -KeyWidth 14 -ValueColor 'Cyan'
         if ($State.LastUpdated) {
-            Write-Host "  Last updated:  $($State.LastUpdated)" -ForegroundColor Gray
+            Write-KeyValue -Key 'Updated' -Value $State.LastUpdated -KeyWidth 14
         }
+
+        Write-SectionBox 'Menu'
+
+        Write-Host '    1  ' -NoNewline -ForegroundColor Cyan
+        Write-Host 'Change theme' -NoNewline -ForegroundColor White
+        Write-Host '          Switch to a different look' -ForegroundColor DarkGray
+
+        Write-Host '    2  ' -NoNewline -ForegroundColor Cyan
+        Write-Host 'Update' -NoNewline -ForegroundColor White
+        Write-Host '                Pull latest and redeploy' -ForegroundColor DarkGray
+
+        Write-Host '    3  ' -NoNewline -ForegroundColor Cyan
+        Write-Host 'Status' -NoNewline -ForegroundColor White
+        Write-Host '                Show what''s installed' -ForegroundColor DarkGray
+
+        Write-Host '    4  ' -NoNewline -ForegroundColor Cyan
+        Write-Host 'Create a new theme' -NoNewline -ForegroundColor White
+        Write-Host '    Scaffold a theme folder' -ForegroundColor DarkGray
+
+        Write-Host '    5  ' -NoNewline -ForegroundColor Cyan
+        Write-Host 'Uninstall' -NoNewline -ForegroundColor White
+        Write-Host '             Restore configs, remove packages' -ForegroundColor DarkGray
+
         Write-Host ''
-        Write-Host '  1  Change theme'        -ForegroundColor White
-        Write-Host '  2  Update'              -ForegroundColor White
-        Write-Host '  3  Status'              -ForegroundColor White
-        Write-Host '  4  Create a new theme'  -ForegroundColor White
-        Write-Host '  5  Uninstall'           -ForegroundColor White
-        Write-Host '  0  Exit'                -ForegroundColor DarkGray
+        Write-Host '    0  ' -NoNewline -ForegroundColor DarkGray
+        Write-Host 'Exit' -ForegroundColor DarkGray
     } else {
-        Write-Host '  Ready to install for the first time.' -ForegroundColor Gray
+        Write-KeyValue -Key 'Repository' -Value $RepoRoot -KeyWidth 14
+
+        Write-SectionBox 'Menu'
+
+        Write-Host '    1  ' -NoNewline -ForegroundColor Cyan
+        Write-Host 'Install' -NoNewline -ForegroundColor White
+        Write-Host '    Set up Windows-Rice for the first time' -ForegroundColor DarkGray
+
         Write-Host ''
-        Write-Host '  1  Install' -ForegroundColor White
-        Write-Host '  0  Exit'    -ForegroundColor DarkGray
+        Write-Host '    0  ' -NoNewline -ForegroundColor DarkGray
+        Write-Host 'Exit' -ForegroundColor DarkGray
     }
     Write-Host ''
 }
@@ -281,26 +393,34 @@ function Show-MainMenu {
 function Show-ThemePicker {
     param(
         [Parameter(Mandatory)]$Themes,
-        [string]$CurrentTheme = ''
+        [string]$CurrentTheme = '',
+        [string]$Title = 'Pick a theme'
     )
 
     Clear-Host
-    Write-Host ''
-    Write-Host '  Pick a theme' -ForegroundColor Cyan
-    Write-Host '  ------------' -ForegroundColor Cyan
-    Write-Host ''
+    Write-SectionBox $Title
 
     $i = 1
     foreach ($t in $Themes) {
-        $marker = ''
-        if ($CurrentTheme -and $t.Name -eq $CurrentTheme) { $marker = ' (current)' }
+        $isCurrent = $CurrentTheme -and $t.Name -eq $CurrentTheme
+        $numColor  = if ($isCurrent) { 'Green' } else { 'Cyan' }
+        $nameColor = if ($isCurrent) { 'Green' } else { 'White' }
 
-        Write-Host ("  {0,3}  {1,-14}  {2}{3}" -f $i, $t.Name, $t.Description, $marker) -ForegroundColor Gray
+        Write-Host ('    ' + $i.ToString().PadRight(4)) -NoNewline -ForegroundColor $numColor
+        Write-Host $t.Name.PadRight(14) -NoNewline -ForegroundColor $nameColor
+        Write-Host $t.Description -NoNewline -ForegroundColor DarkGray
+
+        if ($isCurrent) {
+            Write-Host '  (current)' -ForegroundColor Green
+        } else {
+            Write-Host ''
+        }
         $i++
     }
 
     Write-Host ''
-    Write-Host '   0  Cancel' -ForegroundColor DarkGray
+    Write-Host '    0  ' -NoNewline -ForegroundColor DarkGray
+    Write-Host 'Cancel' -ForegroundColor DarkGray
     Write-Host ''
 }
 
@@ -308,49 +428,83 @@ function Show-Status {
     param([Parameter(Mandatory)]$State)
 
     Clear-Host
-    Write-Host ''
-    Write-Host '  Status' -ForegroundColor Cyan
-    Write-Host '  ------' -ForegroundColor Cyan
-    Write-Host ''
+    Write-Banner
 
     if (-not $State.Installed) {
-        Write-Host '  Not installed.' -ForegroundColor Yellow
+        Write-SectionBox 'Status'
+        Write-Host '    Windows-Rice is not installed on this machine.' -ForegroundColor Yellow
         Write-Host ''
-        Write-Hint 'Run "Install" from the main menu to set up Windows-Rice.'
+        Write-Hint 'Run "Install" from the main menu to set it up.'
+        Write-Host ''
         return
     }
 
-    Write-Host ("  Theme:          {0}" -f $State.Theme) -ForegroundColor Gray
-    if ($State.LastUpdated) {
-        Write-Host ("  Last updated:   {0}" -f $State.LastUpdated) -ForegroundColor Gray
-    }
-    Write-Host ("  Backup root:    {0}" -f $BackupRoot) -ForegroundColor Gray
-    Write-Host ("  Manifest:       {0}" -f $ManifestPath) -ForegroundColor Gray
-    Write-Host ''
+    # ---- Overview --------------------------------------------------------
+    Write-SectionBox 'Overview'
+    Write-KeyValue -Key 'Theme'          -Value $State.Theme -KeyWidth 16 -ValueColor 'Cyan'
+    if ($State.Created)     { Write-KeyValue -Key 'Installed'   -Value $State.Created -KeyWidth 16 }
+    if ($State.LastUpdated) { Write-KeyValue -Key 'Last updated' -Value $State.LastUpdated -KeyWidth 16 }
+    Write-KeyValue -Key 'Repository'     -Value $RepoRoot -KeyWidth 16
 
+    # ---- Deployed configs ------------------------------------------------
     $docsDir = [Environment]::GetFolderPath('MyDocuments')
 
     $paths = @(
-        @{ Label = 'YASB config';        Path = (Join-Path $HomeDir '.config\yasb\config.yaml') }
-        @{ Label = 'YASB styles';        Path = (Join-Path $HomeDir '.config\yasb\styles.css') }
-        @{ Label = 'GlazeWM config';     Path = (Join-Path $HomeDir '.glzr\glazewm\config.yaml') }
-        @{ Label = 'Cava config';        Path = (Join-Path $HomeDir '.config\cava\config') }
-        @{ Label = 'Fastfetch config';   Path = (Join-Path $HomeDir '.config\fastfetch\config.jsonc') }
-        @{ Label = 'Starship config';    Path = (Join-Path $HomeDir '.config\starship.toml') }
-        @{ Label = 'PowerShell profile'; Path = (Join-Path $docsDir 'PowerShell\Microsoft.PowerShell_profile.ps1') }
+        @{ Label = 'YASB config';        Path = (Join-Path $HomeDir '.config\yasb\config.yaml');             Display = '~/.config/yasb/config.yaml' }
+        @{ Label = 'YASB styles';        Path = (Join-Path $HomeDir '.config\yasb\styles.css');              Display = '~/.config/yasb/styles.css' }
+        @{ Label = 'GlazeWM config';     Path = (Join-Path $HomeDir '.glzr\glazewm\config.yaml');           Display = '~/.glzr/glazewm/config.yaml' }
+        @{ Label = 'Cava config';        Path = (Join-Path $HomeDir '.config\cava\config');                  Display = '~/.config/cava/config' }
+        @{ Label = 'Fastfetch config';   Path = (Join-Path $HomeDir '.config\fastfetch\config.jsonc');      Display = '~/.config/fastfetch/config.jsonc' }
+        @{ Label = 'Starship config';    Path = (Join-Path $HomeDir '.config\starship.toml');                Display = '~/.config/starship.toml' }
+        @{ Label = 'PowerShell profile'; Path = (Join-Path $docsDir 'PowerShell\Microsoft.PowerShell_profile.ps1'); Display = '~/Documents/PowerShell/...' }
     )
 
-    Write-Host '  Deployed configs:' -ForegroundColor Cyan
+    Write-SectionBox 'Deployed configs'
     foreach ($p in $paths) {
-        if (Test-Path -LiteralPath $p.Path) {
-            Write-Host ("    [ok]  {0}" -f $p.Label) -ForegroundColor Green
-        } else {
-            Write-Host ("    [ ]   {0}" -f $p.Label) -ForegroundColor DarkGray
-        }
+        $exists = Test-Path -LiteralPath $p.Path
+        $mark   = if ($exists) { '[ok]' } else { '[  ]' }
+        $markColor = if ($exists) { 'Green' } else { 'DarkGray' }
+        $labelColor = if ($exists) { 'Gray' } else { 'DarkGray' }
+
+        Write-Host '    ' -NoNewline
+        Write-Host $mark.PadRight(7) -NoNewline -ForegroundColor $markColor
+        Write-Host $p.Label.PadRight(22) -NoNewline -ForegroundColor $labelColor
+        Write-Host $p.Display -ForegroundColor DarkGray
     }
 
-    Write-Host ''
-    Write-Hint "Config paths resolved from the current user's home directory."
+    # ---- Installation ----------------------------------------------------
+    Write-SectionBox 'Installation'
+
+    $backupSizeMB = 0
+    if (Test-Path -LiteralPath $BackupRoot) {
+        try {
+            $sum = (Get-ChildItem -LiteralPath $BackupRoot -Recurse -File -ErrorAction SilentlyContinue |
+                    Measure-Object -Property Length -Sum).Sum
+            if ($sum) { $backupSizeMB = [math]::Round($sum / 1MB, 1) }
+        } catch {}
+    }
+
+    Write-KeyValue -Key 'Backup root' -Value ("$BackupRoot  ($backupSizeMB MB)") -KeyWidth 16
+    Write-KeyValue -Key 'Manifest'    -Value ("manifest.json  ($($State.ManifestSizeKB) KB)") -KeyWidth 16
+
+    $launcherExists = Test-Path -LiteralPath $LauncherPath
+    $launcherValue  = if ($launcherExists) { "$LauncherPath  [ok]" } else { "$LauncherPath  [missing]" }
+    $launcherColor  = if ($launcherExists) { 'Gray' } else { 'Yellow' }
+    Write-KeyValue -Key 'Launcher' -Value $launcherValue -KeyWidth 16 -ValueColor $launcherColor
+
+    # ---- Environment -----------------------------------------------------
+    Write-SectionBox 'Environment'
+
+    $psVersion = $PSVersionTable.PSVersion.ToString()
+    $edition = if ($PSVersionTable.PSEdition) { $PSVersionTable.PSEdition } else { 'Desktop' }
+    Write-KeyValue -Key 'PowerShell' -Value "$psVersion  ($edition)" -KeyWidth 16
+
+    $shellPath = (Get-Command (Get-PowerShellCommand) -ErrorAction SilentlyContinue).Source
+    if ($shellPath) {
+        Write-KeyValue -Key 'Shell' -Value $shellPath -KeyWidth 16
+    }
+
+    Write-KeyValue -Key 'Rice' -Value "v$script:RiceVersion" -KeyWidth 16 -ValueColor 'Cyan'
 }
 
 # ============================================================ ACTIONS
@@ -358,10 +512,11 @@ function Show-Status {
 function Select-ThemeFromPicker {
     param(
         [Parameter(Mandatory)]$Themes,
-        [string]$CurrentTheme = ''
+        [string]$CurrentTheme = '',
+        [string]$Title = 'Pick a theme'
     )
 
-    Show-ThemePicker -Themes $Themes -CurrentTheme $CurrentTheme
+    Show-ThemePicker -Themes $Themes -CurrentTheme $CurrentTheme -Title $Title
     $choice = Read-Choice -Prompt 'Theme'
     if ($choice -eq '0' -or $choice -eq '') { return $null }
 
@@ -382,14 +537,14 @@ function Select-ThemeFromPicker {
 
 function Invoke-Install {
     $themes = Get-ThemeList
-    $picked = Select-ThemeFromPicker -Themes $themes
+    $picked = Select-ThemeFromPicker -Themes $themes -Title 'Install — pick a theme'
     if ($null -eq $picked) { return }
 
     $theme = $picked.Name
 
     Clear-Host
-    Write-Host ''
-    Write-Host "  Installing Windows-Rice with theme: $theme" -ForegroundColor Cyan
+    Write-SectionBox 'Install'
+    Write-Info "Theme: $theme"
     Write-Host ''
     Write-Warn 'Do not close this window until the installer finishes.'
     Write-Host ''
@@ -409,20 +564,21 @@ function Invoke-ChangeTheme {
     $state  = Get-RiceState
     $themes = Get-ThemeList
 
-    $picked = Select-ThemeFromPicker -Themes $themes -CurrentTheme $state.Theme
+    $picked = Select-ThemeFromPicker -Themes $themes -CurrentTheme $state.Theme -Title 'Change theme'
     if ($null -eq $picked) { return }
 
     $theme = $picked.Name
     if ($theme -eq $state.Theme) {
-        Write-Host ''
-        Write-Host "  '$theme' is already the active theme." -ForegroundColor Gray
+        Clear-Host
+        Write-SectionBox 'Change theme'
+        Write-Host "    '$theme' is already the active theme." -ForegroundColor Gray
         Wait-ForEnter
         return
     }
 
     Clear-Host
-    Write-Host ''
-    Write-Host "  Switching theme to: $theme" -ForegroundColor Cyan
+    Write-SectionBox 'Change theme'
+    Write-Info "Switching to: $theme"
     Write-Host ''
 
     $exit = Invoke-ChildScript -ScriptPath $InstallScript `
@@ -439,8 +595,8 @@ function Invoke-ChangeTheme {
 
 function Invoke-Update {
     Clear-Host
-    Write-Host ''
-    Write-Host '  Updating Windows-Rice' -ForegroundColor Cyan
+    Write-SectionBox 'Update'
+    Write-Info 'Pulling latest from origin and redeploying configs...'
     Write-Host ''
 
     $exit = Invoke-ChildScript -ScriptPath $InstallScript `
@@ -462,42 +618,20 @@ function Invoke-Status {
 }
 
 function Invoke-CreateTheme {
-    $state  = Get-RiceState
     $themes = Get-ThemeList
 
+    $sourceInfo = Select-ThemeFromPicker -Themes $themes -Title 'Create theme — pick a source'
+    if ($null -eq $sourceInfo) { return }
+
+    $source = $sourceInfo.Name
+
     Clear-Host
+    Write-SectionBox 'Create theme'
+    Write-Info "Source: $source"
     Write-Host ''
-    Write-Host '  Create a new theme' -ForegroundColor Cyan
-    Write-Host '  -----------------' -ForegroundColor Cyan
-    Write-Host ''
-    Write-Host '  Start from:' -ForegroundColor Gray
-    Write-Host ''
-
-    $i = 1
-    foreach ($t in $themes) {
-        Write-Host ("  {0,3}  {1,-14}  {2}" -f $i, $t.Name, $t.Description) -ForegroundColor Gray
-        $i++
-    }
-    Write-Host ''
-    Write-Host '   0  Cancel' -ForegroundColor DarkGray
-    Write-Host ''
-
-    $choice = Read-Choice -Prompt 'Source theme'
-    if ($choice -eq '0' -or $choice -eq '') { return }
-
-    $idx = 0
-    if (-not [int]::TryParse($choice, [ref]$idx) -or $idx -lt 1 -or $idx -gt $themes.Count) {
-        Write-Warn 'Invalid selection.'
-        Start-Sleep -Seconds 1
-        return
-    }
-
-    $sourceInfo = $themes[$idx - 1]
-    $source     = $sourceInfo.Name
-
-    Write-Host ''
-    Write-Host '  New theme name (lowercase letters, digits, hyphens, underscores):' -ForegroundColor Gray
-    Write-Host '  > ' -NoNewline -ForegroundColor Gray
+    Write-Host '    New theme name ' -NoNewline -ForegroundColor DarkGray
+    Write-Host '(lowercase, digits, hyphens, underscores)' -ForegroundColor DarkGray
+    Write-Host '    > ' -NoNewline -ForegroundColor Cyan
     $newName = (Read-Host).Trim()
 
     if ($newName -eq '') { return }
@@ -542,7 +676,7 @@ function Invoke-CreateTheme {
     }
 
     Write-Host ''
-    Write-Host "  Creating themes\$newName\ from $source..." -ForegroundColor Gray
+    Write-Info "Creating themes\$newName\ from $source..."
 
     try {
         New-Item -ItemType Directory -Path $newDir -Force | Out-Null
@@ -570,41 +704,36 @@ function Invoke-CreateTheme {
     }
 
     Clear-Host
+    Write-SectionBox 'Theme created'
     Write-Host ''
-    Write-Ok "Theme '$newName' created."
+    Write-Ok $newName
     Write-Host ''
-    Write-Host '  Location:' -ForegroundColor Cyan
-    Write-Host "    $newDir" -ForegroundColor Gray
-    Write-Host ''
-    Write-Host '  Files to edit to make it distinct:' -ForegroundColor Cyan
-    Write-Host ''
-    Write-Host '  Colors (this is 90% of what makes a theme)' -ForegroundColor Yellow
-    Write-Host '    yasb\styles.css              Bar colors, spacing, fonts. Start here.' -ForegroundColor Gray
-    Write-Host "    starship\starship.toml       Set palette = ""$newName"" at the top," -ForegroundColor Gray
-    Write-Host "                                 then add a [palettes.$newName] block" -ForegroundColor Gray
+    Write-KeyValue -Key 'Location' -Value $newDir -KeyWidth 12
+
+    Write-SectionBox 'Colors — start here'
+    Write-Host '    yasb\styles.css              Bar colors, spacing, fonts' -ForegroundColor Gray
+    Write-Host '    starship\starship.toml       Set the palette and add a block' -ForegroundColor Gray
     Write-Host '    terminal\settings.json       Point to a Windows Terminal scheme' -ForegroundColor Gray
     Write-Host '    chronoterm\config.toml       Clock accent color' -ForegroundColor Gray
-    Write-Host ''
-    Write-Host '  Optional' -ForegroundColor Yellow
+
+    Write-SectionBox 'Optional'
     Write-Host '    cava\config                  Visualizer gradient' -ForegroundColor Gray
     Write-Host '    fastfetch\ascii.txt          ASCII logo' -ForegroundColor Gray
     if ($copyWallpapers) {
         Write-Host '    wallpapers\                  Copied from source theme' -ForegroundColor Gray
     } else {
-        Write-Host '    wallpapers\                  Empty. Add at least one file named' -ForegroundColor Gray
-        Write-Host '                                 default.jpg (or .png / .webp) and the' -ForegroundColor Gray
-        Write-Host '                                 installer will set it as your wallpaper.' -ForegroundColor Gray
+        Write-Host '    wallpapers\                  Empty — add a default.jpg (or .png / .webp)' -ForegroundColor Gray
     }
-    Write-Host ''
-    Write-Host '  Rarely needs editing (structure, not palette)' -ForegroundColor DarkGray
+
+    Write-SectionBox 'Rarely needs editing'
     Write-Host '    glazewm\default_glazewm_config.yaml' -ForegroundColor DarkGray
     Write-Host '    fastfetch\config.jsonc' -ForegroundColor DarkGray
     Write-Host '    yasb\default_yasb_config.yaml' -ForegroundColor DarkGray
+
     Write-Host ''
-    Write-Hint 'Tip: styles.css is the biggest file. Search for a color hex from the'
-    Write-Hint 'source theme and replace each match with your own palette.'
+    Write-Hint 'Tip: search styles.css for a hex from the source theme and replace each match.'
     Write-Host ''
-    Write-Hint 'When you are ready to use it, pick "Change theme" from the menu.'
+    Write-Hint 'When you''re ready to use it, pick "Change theme" from the menu.'
 
     if (Confirm-Yes -Prompt 'Open the folder now?' -Default $false) {
         try {
@@ -619,13 +748,9 @@ function Invoke-CreateTheme {
 
 function Invoke-Uninstall {
     Clear-Host
-    Write-Host ''
-    Write-Host '  Uninstall Windows-Rice' -ForegroundColor Cyan
-    Write-Host '  ---------------------' -ForegroundColor Cyan
-    Write-Host ''
-    Write-Host '  This restores your config files from backups and optionally' -ForegroundColor Gray
-    Write-Host '  removes packages that this installer added.' -ForegroundColor Gray
-    Write-Host ''
+    Write-SectionBox 'Uninstall'
+    Write-Host '    This restores your config files from backups and optionally' -ForegroundColor Gray
+    Write-Host '    removes packages that this installer added.' -ForegroundColor Gray
 
     if (-not (Confirm-Yes -Prompt 'Continue?' -Default $false)) { return }
 
@@ -637,8 +762,8 @@ function Invoke-Uninstall {
     if ($purge)          { $uninstallArgs += '-Purge' }
 
     Clear-Host
-    Write-Host ''
-    Write-Host '  Uninstalling...' -ForegroundColor Cyan
+    Write-SectionBox 'Uninstall'
+    Write-Info 'Uninstalling...'
     Write-Host ''
 
     $exit = Invoke-ChildScript -ScriptPath $UninstallScript -ScriptArgs $uninstallArgs
@@ -656,26 +781,43 @@ function Invoke-Uninstall {
 
 Assert-RepoLayout
 
-while ($true) {
-    $state = Get-RiceState
-    Show-MainMenu -State $state
+try {
+    while ($true) {
+        $state = Get-RiceState
+        Show-MainMenu -State $state
 
-    Write-Host '  Choice: ' -NoNewline -ForegroundColor Gray
-    $choice = (Read-Host).Trim()
+        $choice = Read-Choice -Prompt 'Choice'
 
-    if ($state.Installed) {
-        switch ($choice) {
-            '0' { exit 0 }
-            '1' { Invoke-ChangeTheme }
-            '2' { Invoke-Update }
-            '3' { Invoke-Status }
-            '4' { Invoke-CreateTheme }
-            '5' { Invoke-Uninstall }
-        }
-    } else {
-        switch ($choice) {
-            '0' { exit 0 }
-            '1' { Invoke-Install }
+        if ($state.Installed) {
+            switch ($choice) {
+                '0' { break }
+                '1' { Invoke-ChangeTheme }
+                '2' { Invoke-Update }
+                '3' { Invoke-Status }
+                '4' { Invoke-CreateTheme }
+                '5' { Invoke-Uninstall }
+                default {
+                    if ($choice -ne '') {
+                        Write-Warn 'Unknown option.'
+                        Start-Sleep -Seconds 1
+                    }
+                }
+            }
+        } else {
+            switch ($choice) {
+                '0' { break }
+                '1' { Invoke-Install }
+                default {
+                    if ($choice -ne '') {
+                        Write-Warn 'Unknown option.'
+                        Start-Sleep -Seconds 1
+                    }
+                }
+            }
         }
     }
+} finally {
+    Write-Host ''
+    Write-Host '  Goodbye.' -ForegroundColor DarkGray
+    Write-Host ''
 }
