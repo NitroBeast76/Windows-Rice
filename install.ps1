@@ -1359,6 +1359,13 @@ function Deploy-Wallpapers {
 
         Each wallpaper is deployed through Backup-And-Deploy, so a file
         replacing a same-named user file gets a timestamped backup.
+
+        After the copy loop, the destination folder is synced: any file
+        that isn't in the source is removed. The destination is rice-owned
+        — its only purpose is to mirror the current theme's source set so
+        YASB's gallery shows the right wallpapers. Without this cleanup,
+        files from a previous deploy (renamed, replaced, or removed in the
+        repo) would linger and show up in the gallery as orphans.
     #>
     param(
         [Parameter(Mandatory)][AllowEmptyString()][string]$ThemeName
@@ -1388,6 +1395,22 @@ function Deploy-Wallpapers {
     if ($files.Count -eq 0) {
         Write-Skip "No wallpapers found ($source)."
         Add-Summary 'Skipped' "Wallpapers (no files — $source)"
+
+        # Clear stale wallpapers from a previous deploy if the source set
+        # is now empty. The destination is rice-managed, so leaving files
+        # behind would show up in YASB's gallery as orphans.
+        if (-not $DryRun -and (Test-Path -LiteralPath $destRoot)) {
+            $existing = @(Get-ChildItem -LiteralPath $destRoot -File -Recurse -ErrorAction SilentlyContinue)
+            if ($existing.Count -gt 0) {
+                try {
+                    Remove-Item -LiteralPath $destRoot -Recurse -Force -ErrorAction Stop
+                    Write-Info "cleared $($existing.Count) stale wallpaper(s) from $destRoot"
+                } catch {
+                    Write-WarnLine "Could not clear stale wallpapers: $_"
+                }
+            }
+        }
+
         if (-not $DryRun -and -not (Test-Path -LiteralPath $WallpaperDir)) {
             New-Item -ItemType Directory -Path $WallpaperDir -Force | Out-Null
         }
@@ -1411,6 +1434,48 @@ function Deploy-Wallpapers {
             -Destination  $destination `
             -Label        "Wallpaper: $relative" `
             -BackupSubdir $backupSubdir | Out-Null
+    }
+
+    # ------------------------------------------------------------------
+    # Sync: remove files in the destination that aren't in the source.
+    #
+    # The theme's destination folder is rice-managed. Its only purpose is
+    # to mirror the source wallpaper set so YASB's gallery shows the
+    # current theme's wallpapers and nothing else.
+    #
+    # Without this, files from a previous deploy linger when the source
+    # set changes — a renamed or removed wallpaper stays in the
+    # destination and shows up in the gallery as an orphan. Thematic
+    # drift, plus a growing folder over time.
+    #
+    # The check is per-file by relative path. Files with the same name as
+    # a source file are untouched (Backup-And-Deploy already handled the
+    # backup for those).
+    # ------------------------------------------------------------------
+    if (-not $DryRun -and (Test-Path -LiteralPath $destRoot)) {
+        $sourceRelPaths = @{}
+        foreach ($f in $files) {
+            $rel = $f.FullName.Substring($src.Length).TrimStart('\', '/')
+            $sourceRelPaths[$rel] = $true
+        }
+
+        $orphans = @(
+            Get-ChildItem -LiteralPath $destRoot -File -Recurse -ErrorAction SilentlyContinue |
+                Where-Object {
+                    $rel = $_.FullName.Substring($destRoot.Length).TrimStart('\', '/')
+                    -not $sourceRelPaths.ContainsKey($rel)
+                }
+        )
+
+        foreach ($o in $orphans) {
+            $rel = $o.FullName.Substring($destRoot.Length).TrimStart('\', '/')
+            Remove-Item -LiteralPath $o.FullName -Force -ErrorAction SilentlyContinue
+            Write-Info "removed orphaned wallpaper: $rel"
+        }
+
+        if ($orphans.Count -gt 0) {
+            Add-Summary 'Configured' "Removed $($orphans.Count) orphaned wallpaper(s) from $themeSubdir"
+        }
     }
 
     # Set default wallpaper on first run (or when the theme changed).

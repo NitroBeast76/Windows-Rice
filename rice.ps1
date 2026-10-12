@@ -84,7 +84,7 @@ function Write-Banner {
 
     Write-Host ''
     Write-Host ('─' * 62) -ForegroundColor DarkMagenta
-    Write-Host '  A Windows 10/11 rice, installed and managed in one place.' -ForegroundColor DarkGray
+    Write-Host '  A Windows 10/11 rice, installed and managed in one place.' -ForegroundColor Gray
     Write-Host ''
 }
 
@@ -146,7 +146,7 @@ function Write-MenuItem {
 
 function Write-Hint {
     param([string]$Text)
-    Write-Host "  $Text" -ForegroundColor DarkGray
+    Write-Host "  $Text" -ForegroundColor Gray
 }
 
 function Write-Warn {
@@ -291,7 +291,7 @@ function Confirm-Yes {
     $suffix = if ($Default) { '[Y/n]' } else { '[y/N]' }
     Write-Host ''
     Write-Host "  $Prompt " -NoNewline -ForegroundColor Gray
-    Write-Host $suffix -NoNewline -ForegroundColor DarkGray
+    Write-Host $suffix -NoNewline -ForegroundColor Gray
     Write-Host ' ' -NoNewline
     $answer = (Read-Host).Trim()
     if ([string]::IsNullOrEmpty($answer)) { return $Default }
@@ -301,7 +301,7 @@ function Confirm-Yes {
 function Wait-ForEnter {
     param([string]$Message = 'Press Enter to return to the menu')
     Write-Host ''
-    Write-Host "  $Message..." -ForegroundColor DarkGray
+    Write-Host "  $Message..." -ForegroundColor Gray
     [void](Read-Host)
 }
 
@@ -508,7 +508,7 @@ function Show-MainMenu {
     }
 
     Write-Host ''
-    Write-MenuItem -Number '0' -Label 'Exit' -NumberColor 'DarkGray' -LabelColor 'DarkGray'
+    Write-MenuItem -Number '0' -Label 'Exit' -NumberColor 'Gray' -LabelColor 'Gray'
     Write-Host ''
 }
 
@@ -563,8 +563,8 @@ function Show-ThemePicker {
     }
 
     Write-Host ''
-    Write-Host '    0  ' -NoNewline -ForegroundColor DarkGray
-    Write-Host 'Cancel' -ForegroundColor DarkGray
+    Write-Host '    0  ' -NoNewline -ForegroundColor Gray
+    Write-Host 'Cancel' -ForegroundColor Gray
     Write-Host ''
 }
 
@@ -612,7 +612,7 @@ function Show-Status {
         Write-Host '    ' -NoNewline
         Write-Host $mark.PadRight(7) -NoNewline -ForegroundColor $markColor
         Write-Host $p.Label.PadRight(22) -NoNewline -ForegroundColor Gray
-        Write-Host $p.Display -ForegroundColor DarkGray
+        Write-Host $p.Display -ForegroundColor Gray
     }
 
     # ---- Installation ----------------------------------------------------
@@ -777,8 +777,8 @@ function Invoke-CreateTheme {
         Write-Info "Source: $source"
     }
     Write-Host ''
-    Write-Host '    New theme name ' -NoNewline -ForegroundColor DarkGray
-    Write-Host '(lowercase, digits, hyphens, underscores)' -ForegroundColor DarkGray
+    Write-Host '    New theme name ' -NoNewline -ForegroundColor Gray
+    Write-Host '(lowercase, digits, hyphens, underscores)' -ForegroundColor Gray
     Write-Host '    > ' -NoNewline -ForegroundColor Cyan
     $newName = (Read-Host).Trim()
 
@@ -913,9 +913,9 @@ function Invoke-CreateTheme {
     }
 
     Write-SectionBox 'Rarely needs editing'
-    Write-Host '    glazewm\default_glazewm_config.yaml' -ForegroundColor DarkGray
-    Write-Host '    fastfetch\config.jsonc' -ForegroundColor DarkGray
-    Write-Host '    yasb\default_yasb_config.yaml' -ForegroundColor DarkGray
+    Write-Host '    glazewm\default_glazewm_config.yaml' -ForegroundColor Gray
+    Write-Host '    fastfetch\config.jsonc' -ForegroundColor Gray
+    Write-Host '    yasb\default_yasb_config.yaml' -ForegroundColor Gray
 
     Write-Host ''
     Write-Hint 'Tip: search styles.css for a hex from the source theme and replace each match.'
@@ -1005,6 +1005,6 @@ try {
     }
 } finally {
     Write-Host ''
-    Write-Host '  Goodbye.' -ForegroundColor DarkGray
+    Write-Host '  Goodbye.' -ForegroundColor Gray
     Write-Host ''
 }
