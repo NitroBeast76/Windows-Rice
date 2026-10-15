@@ -109,4 +109,5 @@ Write-Host '  9. Edit fastfetch\config.jsonc -> optional, only if modules differ
 Write-Host ' 10. Edit yasb\default_yasb_config.yaml -> optional, only if layout differs' -ForegroundColor Gray
 Write-Host ''
 Write-Host 'Files 6-10 ship as identical copies of the base. Delete them if the theme does not need them.' -ForegroundColor DarkGray
-Write-Host ''
+Write-Host ''$bytes = [System.IO.File]::ReadAllBytes('rice.ps1')
+'{0:X2} {1:X2} {2:X2}' -f $bytes[0], $bytes[1], $bytes[2]
