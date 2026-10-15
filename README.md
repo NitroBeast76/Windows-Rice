@@ -52,6 +52,7 @@ That's it. Really. The TUI opens, you pick a theme, and the installer runs under
     - [Switching themes](#switching-themes)
     - [How themes actually work](#how-themes-actually-work)
     - [Adding your own theme](#adding-your-own-theme)
+    - [Full theme-making guide →](THEMES.md)
   - [The TUI](#the-tui)
     - [Launching it](#launching-it)
     - [What it does](#what-it-does)
